@@ -14,7 +14,7 @@ Zusätzliche Forschungsfrage: Eignung von KI-gestützter Entwicklung
 - Framework: ESP-IDF (espressif/arduino-esp32 NICHT verwenden)
 - Build-System: PlatformIO in VS Code
 - Sprache: C (C99) – kein C++
-- RTOS: FreeRTOS (bereits in ESP-IDF enthalten)
+- RTOS: FreeRTOS (in ESP-IDF integriert, kein eigener Scheduler)
 
 ## Wichtig zu Hardware-Treibern
 - Für I2C, SPI, UART, GPIO ausschließlich die ESP-IDF eigenen
@@ -24,80 +24,85 @@ Zusätzliche Forschungsfrage: Eignung von KI-gestützter Entwicklung
 
 ## Systemarchitektur – Dual ESP32
 
-### Rollen
-- **Slave ESP32** = Hardware ESP32 im Smart Farm Kit
-  - Ausschließlich Hardware-Ansteuerung und Sensorauswertung
-  - Keine Regelungslogik, keine Entscheidungen
-  - Empfängt Steuerbefehle vom Master, führt sie aus
-  - Sendet Sensordaten zyklisch an Master
+### esp_hardware (Slave – Smart Farm Kit)
+- PlatformIO Projekt: /esp_hardware/
+- Ausschließlich Hardware-Ansteuerung und Sensorauswertung
+- Keine Regelungslogik, keine Entscheidungen
+- Sendet Sensordaten zyklisch an esp_logic via UART2
+- Empfängt Steuerbefehle von esp_logic und führt sie aus
 
-- **Master ESP32** = zweiter ESP32, Logic & Control
-  - Führt alle Regelungsalgorithmen und State Machines aus
-  - Empfängt Sensordaten vom Slave via UART
-  - Sendet Steuerbefehle an den Slave via UART
-  - WiFi-fähig (UC5 reserviert)
-  - Keine direkte Hardware außer UART-Bus
+### esp_logic (Master – Logic & Control)
+- PlatformIO Projekt: /esp_logic/
+- Führt alle Regelungsalgorithmen und State Machines aus
+- Empfängt Sensordaten von esp_hardware via UART2
+- Sendet Steuerbefehle an esp_hardware via UART2
+- WiFi-fähig (UC5 reserviert)
+- Keine direkte Hardware außer UART2-Bus
 
-### UART-Kommunikation Master ↔ Slave
+### UART2-Kommunikation esp_logic ↔ esp_hardware
 - Interface: UART2 auf beiden ESP32s
 - Baudrate: 115200
 - Verkabelung (physisch festgelegt, nicht ändern):
-  - Slave TX = io2  → Master RX = io32
-  - Slave RX = io4  ← Master TX = io33
+  - esp_hardware TX = io2  →  esp_logic RX = io32
+  - esp_hardware RX = io4  ←  esp_logic TX = io33
   - GND gemeinsam verbunden
-- Protokoll: definiertes Nachrichtenformat (Header + Payload + Checksum)
-- Heartbeat: Slave sendet zyklisch alle 100ms Sensordaten
-- Timeout: kein Heartbeat vom Master in 500ms → Slave geht in FAILSAFE
+- Protokoll: binäres Nachrichtenformat:
+  [ START_BYTE | MSG_TYPE | PAYLOAD_LEN | PAYLOAD | CHECKSUM ]
+    0xAA         1 Byte     1 Byte        N Bytes   1 Byte (XOR)
+  - MSG_SENSOR_DATA  = 0x01  (esp_hardware → esp_logic, alle Sensorwerte)
+  - MSG_ACTUATOR_CMD = 0x02  (esp_logic → esp_hardware, Steuerbefehle)
+- Heartbeat: esp_hardware sendet zyklisch alle 100ms Sensordaten
+- Timeout: kein Heartbeat in 500ms → esp_hardware geht in FAILSAFE
 
-### FreeRTOS Task-Struktur – Slave ESP32
+### FreeRTOS Task-Struktur – esp_hardware
 - sensor_task    – liest alle Sensoren zyklisch (10ms)
-- actuator_task  – setzt Aktorwerte aus Command-Buffer
-- comm_task      – UART2 senden/empfangen, Protokoll-Handling
-- watchdog_task  – überwacht alle Tasks, triggert Reset bei Hänger
+- actuator_task  – setzt Aktorwerte aus Command-Buffer (10ms)
+- comm_task      – UART2 senden/empfangen, Protokoll-Handling (5ms)
+- watchdog_task  – überwacht alle Tasks, triggert Reset bei Hänger (1000ms)
 
-### FreeRTOS Task-Struktur – Master ESP32
-- control_task   – führt PI-Regler und State Machines aus (10ms)
-- comm_task      – UART2 senden/empfangen
+### FreeRTOS Task-Struktur – esp_logic
+- control_task   – PI-Regler und State Machines (10ms)
+- comm_task      – UART2 senden/empfangen (5ms)
 - display_task   – LCD Ausgabe (100ms)
-- monitor_task   – Safety-Checks, Fehlerbehandlung
+- monitor_task   – Safety-Checks, Fehlerbehandlung (10ms)
 
-## Hardware Pin-Mapping – Slave ESP32 (Smart Farm Kit)
+## Hardware Pin-Mapping – esp_hardware (Smart Farm Kit)
 
 ### Aktoren
-| Komponente    | Pin(s)       | Typ     | Anmerkung                          |
-|---------------|--------------|---------|------------------------------------|
-| Fan           | io18, io19   | Digital | io18=IN-, io19=IN+                 |
-| Servo         | io26         | PWM     | Futterklappe auf/zu                |
-| Water Pump    | io25         | Digital | 5V Relay, active HIGH              |
-| Buzzer        | io16         | Digital | active HIGH                        |
-| LED           | io27         | Digital | active HIGH                        |
-| LCD 1602      | io21, io22   | I2C     | SDA=io21, SCL=io22                 |
+| Komponente    | Pin(s)     | Typ     | Anmerkung             |
+|---------------|------------|---------|-----------------------|
+| Fan           | io18, io19 | Digital | io18=IN-, io19=IN+    |
+| Servo         | io26       | PWM     | Futterklappe auf/zu   |
+| Water Pump    | io25       | Digital | 5V Relay, active HIGH |
+| Buzzer        | io16       | Digital | active HIGH           |
+| LED           | io27       | Digital | active HIGH           |
+| LCD 1602      | io21, io22 | I2C     | SDA=io21, SCL=io22    |
 
 ### Sensoren
-| Komponente              | Pin(s)       | Typ     | Anmerkung                |
-|-------------------------|--------------|---------|--------------------------|
-| PIR Motion Sensor       | io23         | Digital | Seite Gebäude            |
-| Button                  | io5          | Digital | Manueller Input          |
-| Ultrasonic Module       | io12, io13   | Digital | TRIG=io12, ECHO=io13     |
-| Temperature & Humidity  | io17         | Digital | DHT-Protokoll            |
-| Steam Sensor            | io35         | Analog  |                          |
-| Photoresistor (LDR)     | io34         | Analog  | Helligkeitsmessung       |
-| Water Level Sensor      | io33         | Analog  | Kapazitiv, Füllstand     |
-| Soil Humidity Sensor    | io32         | Analog  |                          |
+| Komponente             | Pin(s)     | Typ     | Anmerkung            |
+|------------------------|------------|---------|----------------------|
+| PIR Motion Sensor      | io23       | Digital | Seite Gebäude        |
+| Button                 | io5        | Digital | Manueller Input      |
+| Ultrasonic Module      | io12, io13 | Digital | TRIG=io12, ECHO=io13 |
+| Temperature & Humidity | io17       | Digital | DHT-Protokoll        |
+| Steam Sensor           | io35       | Analog  |                      |
+| Photoresistor (LDR)    | io34       | Analog  | Helligkeitsmessung   |
+| Water Level Sensor     | io33       | Analog  | Kapazitiv, Füllstand |
+| Soil Humidity Sensor   | io32       | Analog  |                      |
 
-### UART2 – Kommunikation zum Master (festgelegt)
-| Funktion  | Pin  |
-|-----------|------|
-| Slave TX  | io2  |
-| Slave RX  | io4  |
+### UART2 – Kommunikation zu esp_logic (festgelegt)
+| Funktion        | Pin |
+|-----------------|-----|
+| esp_hardware TX | io2 |
+| esp_hardware RX | io4 |
 
-## Hardware Pin-Mapping – Master ESP32
+## Hardware Pin-Mapping – esp_logic (Master)
 
-### UART2 – Kommunikation zum Slave (festgelegt)
-| Funktion  | Pin  |
-|-----------|------|
-| Master TX | io33 |
-| Master RX | io32 |
+### UART2 – Kommunikation zu esp_hardware (festgelegt)
+| Funktion      | Pin  |
+|---------------|------|
+| esp_logic TX  | io33 |
+| esp_logic RX  | io32 |
 
 ## Architektur-Prinzipien
 - Strikte Trennung in drei Schichten:
@@ -111,12 +116,12 @@ Zusätzliche Forschungsfrage: Eignung von KI-gestützter Entwicklung
 
 ## Safety-Regeln (verbindlich für jeden Code)
 - Water Pump: max. kontinuierliche Laufzeit 30s, danach mind. 5s Pause
-  (im Aktor-Layer erzwingen, nicht nur in der Regelung)
+  (im actuator_task erzwingen, unabhängig von Regelungslogik)
 - Alle Sensoren: Plausibilitätsprüfung – Wert außerhalb physikalisch
   sinnvollem Bereich → Fehlerflag setzen, Wert nicht weiterverwenden
-- UART Timeout: kein Heartbeat vom Master in 500ms → Slave setzt alle
+- UART Timeout: kein Heartbeat in 500ms → esp_hardware setzt alle
   Aktoren in sicheren Zustand (Pumpe aus, Fan aus, Servo neutral)
-- Watchdog Timer auf beiden ESP32s aktivieren
+- Watchdog Timer auf beiden ESP32s aktivieren und zyklisch füttern
 - Bei Fehler immer: Fehlerflag setzen + LCD-Ausgabe + Logging
   (nie still ignorieren)
 - Pumpe darf nie durch Software-Fehler dauerhaft aktiv bleiben –
@@ -130,6 +135,7 @@ Zusätzliche Forschungsfrage: Eignung von KI-gestützter Entwicklung
 
 ## Nicht im Scope
 - Entwicklung eigener Hardware-Treiber
+- Entwicklung eines eigenen Schedulers (FreeRTOS verwenden)
 - Optimierung von Hardwarekomponenten
 - Messtechnische Analyse von Energieflüssen
 - Entwicklung neuartiger Regelungsverfahren
@@ -149,12 +155,11 @@ Zusätzliche Forschungsfrage: Eignung von KI-gestützter Entwicklung
 - Alle Kommentare auf Englisch
 
 ## Repo-Struktur
-- /src          – Quellcode (.c Dateien)
-- /include      – Header-Dateien (.h)
-- /test         – Unit-Tests (host-side, ohne Hardware)
-- /components   – Wiederverwendbare ESP-IDF Komponenten
-- /docs         – Dokumentation, Testprotokolle
-- platformio.ini – PlatformIO Projektkonfiguration
+- /esp_hardware/  – PlatformIO Projekt Slave ESP32 (Smart Farm Kit)
+- /esp_logic/     – PlatformIO Projekt Master ESP32 (Logic & Control)
+- /docs/          – Dokumentation, Testprotokolle, Diagramme
+- CLAUDE.md       – Kontext für Claude Code Agent
+- README.md       – Projektübersicht für Menschen
 
 ## Testing
 - Unit-Tests laufen auf dem Host-PC (nicht auf dem ESP32)
