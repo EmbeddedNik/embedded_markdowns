@@ -27,23 +27,14 @@ void watchdog_task_init(void)
         .trigger_panic  = true,
     };
     esp_task_wdt_reconfigure(&wdt_cfg);
-    ESP_LOGI(TAG, "TWDT configured: timeout=%u ms, panic=true", TWDT_TIMEOUT_MS);
 }
 
 /* ── Task loop ───────────────────────────────────────────────────── */
 void watchdog_task(void *arg)
 {
-    /* Subscribe this task */
+    /* Subscribe this task only. Each other task subscribes itself via
+     * esp_task_wdt_add(NULL) at the start of its own loop. */
     esp_task_wdt_add(NULL);
-
-    /* Wait until all other task handles are available, then subscribe them.
-     * The handles are written by main() before the scheduler starts, so they
-     * are already set when this task first runs after vTaskStartScheduler(). */
-    if (g_sensor_task_handle   != NULL) esp_task_wdt_add(g_sensor_task_handle);
-    if (g_actuator_task_handle != NULL) esp_task_wdt_add(g_actuator_task_handle);
-    if (g_comm_task_handle     != NULL) esp_task_wdt_add(g_comm_task_handle);
-
-    ESP_LOGI(TAG, "Subscribed sensor, actuator and comm tasks to TWDT");
 
     TickType_t last_wake    = xTaskGetTickCount();
     uint32_t   hwm_counter  = 0;
@@ -57,10 +48,6 @@ void watchdog_task(void *arg)
             UBaseType_t hwm_actuator = uxTaskGetStackHighWaterMark(g_actuator_task_handle);
             UBaseType_t hwm_comm     = uxTaskGetStackHighWaterMark(g_comm_task_handle);
             UBaseType_t hwm_wdog     = uxTaskGetStackHighWaterMark(NULL);
-
-            ESP_LOGI(TAG,
-                     "Stack HWM (words) – sensor:%u actuator:%u comm:%u watchdog:%u",
-                     hwm_sensor, hwm_actuator, hwm_comm, hwm_wdog);
 
             if (hwm_sensor   < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: sensor_task");
             if (hwm_actuator < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: actuator_task");

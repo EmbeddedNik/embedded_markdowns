@@ -1,0 +1,6 @@
+# sdkconfig.defaults – esp_logic
+# Overrides applied before the main sdkconfig is generated.
+# Delete the generated 'sdkconfig' file and rebuild when changing these.
+
+# 1 kHz tick rate → 1 ms resolution for vTaskDelayUntil / pdMS_TO_TICKS
+CONFIG_FREERTOS_HZ=1000

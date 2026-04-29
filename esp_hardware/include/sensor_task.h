@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "esp_adc/adc_oneshot.h"
 
 /* ── GPIO pin definitions ────────────────────────────────────────── */
 #define SENSOR_PIN_PIR          23
@@ -20,12 +21,12 @@
 #define SENSOR_PIN_US_ECHO      13
 #define SENSOR_PIN_DHT          17
 
-/* ── ADC channel mapping (ESP32 ADC1) ───────────────────────────── */
-/* GPIO32 = ADC1_CH4 | GPIO33 = ADC1_CH5 | GPIO34 = ADC1_CH6 | GPIO35 = ADC1_CH7 */
-#define SENSOR_ADC_SOIL         ADC1_CHANNEL_4   /* io32 */
-#define SENSOR_ADC_WATER_LEVEL  ADC1_CHANNEL_5   /* io33 */
-#define SENSOR_ADC_LDR          ADC1_CHANNEL_6   /* io34 */
-#define SENSOR_ADC_STEAM        ADC1_CHANNEL_7   /* io35 */
+/* ── ADC channel mapping (ESP32 ADC1, new oneshot driver) ────────── */
+/* GPIO33 = ADC_CHANNEL_5 | GPIO34 = ADC_CHANNEL_6 | GPIO35 = ADC_CHANNEL_7 */
+/* NOTE: io32 (soil sensor) is not used in this project               */
+#define SENSOR_ADC_WATER_LEVEL  ADC_CHANNEL_5   /* io33 */
+#define SENSOR_ADC_LDR          ADC_CHANNEL_6   /* io34 */
+#define SENSOR_ADC_STEAM        ADC_CHANNEL_7   /* io35 */
 
 /* ── Plausibility limits ─────────────────────────────────────────── */
 #define SENSOR_DISTANCE_CM_MIN  2.0f
@@ -35,10 +36,9 @@
 #define SENSOR_HUMIDITY_MIN     0.0f
 #define SENSOR_HUMIDITY_MAX     100.0f
 
-/* ── Shared sensor data (protected by g_sensor_mutex) ───────────── */
+/* ── Internal hardware sensor data (protected by g_sensor_mutex) ─── */
 typedef struct {
     /* ADC sensors (raw 12-bit, 0–4095) */
-    int     soil_raw;
     int     water_level_raw;
     int     ldr_raw;
     int     steam_raw;
@@ -55,17 +55,16 @@ typedef struct {
     float   humidity_pct;
 
     /* Per-sensor error flags (set when plausibility check fails) */
-    bool    err_soil;
     bool    err_water_level;
     bool    err_ldr;
     bool    err_steam;
     bool    err_distance;
     bool    err_temperature;
     bool    err_humidity;
-} sensor_data_t;
+} hw_sensor_data_t;
 
 /* ── Globals defined in sensor_task.c ───────────────────────────── */
-extern sensor_data_t    g_sensor_data;
+extern hw_sensor_data_t  g_sensor_data;
 extern SemaphoreHandle_t g_sensor_mutex;
 
 /* ── Public API ──────────────────────────────────────────────────── */

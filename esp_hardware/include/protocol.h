@@ -30,8 +30,14 @@
  * error_flags bitmask (sensor_data_t.error_flags)
  * ---------------------------------------------------------------------- */
 
-#define ERROR_FLAG_SENSOR_FAIL    ((uint8_t)0x01)  /* bit 0: sensor read failed */
-#define ERROR_FLAG_UART_TIMEOUT   ((uint8_t)0x02)  /* bit 1: UART communication timeout */
+#define ERROR_FLAG_LDR            ((uint8_t)0x01)  /* bit 0: photoresistor ADC failure */
+#define ERROR_FLAG_WATER_LEVEL    ((uint8_t)0x02)  /* bit 1: water level ADC failure */
+#define ERROR_FLAG_STEAM          ((uint8_t)0x04)  /* bit 2: steam sensor ADC failure */
+#define ERROR_FLAG_DISTANCE       ((uint8_t)0x08)  /* bit 3: ultrasonic timeout */
+#define ERROR_FLAG_TEMPERATURE    ((uint8_t)0x10)  /* bit 4: DHT temperature failure */
+#define ERROR_FLAG_HUMIDITY       ((uint8_t)0x20)  /* bit 5: DHT humidity failure */
+/* bit 6: reserved */
+#define ERROR_FLAG_UART_TIMEOUT   ((uint8_t)0x80)  /* bit 7: UART communication timeout */
 
 /* -------------------------------------------------------------------------
  * Sensor data payload – MSG_SENSOR_DATA (17 bytes, packed)
@@ -55,16 +61,17 @@ typedef struct __attribute__((packed)) {
 } sensor_data_t;
 
 /* -------------------------------------------------------------------------
- * Actuator command payload – MSG_ACTUATOR_CMD (6 bytes)
+ * Actuator command payload - MSG_ACTUATOR_CMD (7 bytes)
  * ---------------------------------------------------------------------- */
 
 typedef struct {
     uint8_t  pump_on;          /* 0 = off, 1 = on (io25) */
-    uint8_t  fan_speed;        /* 0 = off, 1 = low, 2 = high (io18/io19) */
+    uint8_t  fan_speed;        /* 0 = off, nonzero = on (io19 PWM, io18 LOW) */
     uint8_t  servo_position;   /* 0 = closed, 100 = open (io26) */
     uint8_t  led_on;           /* 0 = off, 1 = on (io27) */
     uint8_t  buzzer_on;        /* 0 = off, 1 = on (io16) */
     uint8_t  display_mode;     /* 0 = normal, 1 = warning, 2 = critical, 3 = alarm */
+    uint8_t  profile;          /* 0 = eco, 1 = normal, 2 = performance */
 } actuator_cmd_t;
 
 /* -------------------------------------------------------------------------
@@ -83,13 +90,13 @@ typedef struct {
  * Compile-time size verification
  *
  * sensor_data_t : 7 * uint16_t (14) + 3 * uint8_t (3) = 17 bytes (packed)
- * actuator_cmd_t: 6 * uint8_t  (6)                     =  6 bytes
+ * actuator_cmd_t: 7 * uint8_t  (7)                     =  7 bytes
  * uart_frame_t  : 3 * uint8_t  (3) + uint8_t[32] (32)
  *                 + 1 * uint8_t (1)                    = 36 bytes
  * ---------------------------------------------------------------------- */
 
 _Static_assert(sizeof(sensor_data_t)  == 17, "sensor_data_t must be 17 bytes (packed)");
-_Static_assert(sizeof(actuator_cmd_t) ==  6, "actuator_cmd_t must be 6 bytes");
+_Static_assert(sizeof(actuator_cmd_t) ==  7, "actuator_cmd_t must be 7 bytes");
 _Static_assert(sizeof(uart_frame_t)   == 36, "uart_frame_t must be 36 bytes");
 
 /* Verify payload structs fit within the maximum payload size */

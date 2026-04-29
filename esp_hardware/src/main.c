@@ -26,7 +26,7 @@ TaskHandle_t g_watchdog_task_handle = NULL;
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "esp_hardware starting – UC1.2 FreeRTOS skeleton");
+    ESP_LOGI(TAG, "esp_hardware starting");
 
     /* Initialise shared resources and peripherals before task creation */
     watchdog_task_init();   /* configure TWDT first */
@@ -52,6 +52,5 @@ void app_main(void)
     configASSERT(g_comm_task_handle     != NULL);
     configASSERT(g_watchdog_task_handle != NULL);
 
-    ESP_LOGI(TAG, "All tasks created – scheduler running");
     /* app_main returns; the FreeRTOS scheduler continues */
 }
