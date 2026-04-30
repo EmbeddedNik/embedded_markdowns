@@ -22,11 +22,9 @@
 #define SENSOR_PIN_DHT          17
 
 /* ── ADC channel mapping (ESP32 ADC1, new oneshot driver) ────────── */
-/* GPIO33 = ADC_CHANNEL_5 | GPIO34 = ADC_CHANNEL_6 | GPIO35 = ADC_CHANNEL_7 */
-/* NOTE: io32 (soil sensor) is not used in this project               */
+/* GPIO33 = ADC_CHANNEL_5 | GPIO34 = ADC_CHANNEL_6 */
 #define SENSOR_ADC_WATER_LEVEL  ADC_CHANNEL_5   /* io33 */
 #define SENSOR_ADC_LDR          ADC_CHANNEL_6   /* io34 */
-#define SENSOR_ADC_STEAM        ADC_CHANNEL_7   /* io35 */
 
 /* ── Plausibility limits ─────────────────────────────────────────── */
 #define SENSOR_DISTANCE_CM_MIN  2.0f
@@ -41,7 +39,6 @@ typedef struct {
     /* ADC sensors (raw 12-bit, 0–4095) */
     int     water_level_raw;
     int     ldr_raw;
-    int     steam_raw;
 
     /* Digital sensors */
     bool    pir_detected;
@@ -57,7 +54,6 @@ typedef struct {
     /* Per-sensor error flags (set when plausibility check fails) */
     bool    err_water_level;
     bool    err_ldr;
-    bool    err_steam;
     bool    err_distance;
     bool    err_temperature;
     bool    err_humidity;

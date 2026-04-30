@@ -25,8 +25,14 @@
 /* ── LEDC configuration ──────────────────────────────────────────── */
 #define LEDC_TIMER_SERVO        LEDC_TIMER_0
 #define LEDC_TIMER_FAN          LEDC_TIMER_1
+#define LEDC_TIMER_BUZZER       LEDC_TIMER_2
 #define LEDC_CHANNEL_SERVO      LEDC_CHANNEL_0
 #define LEDC_CHANNEL_FAN        LEDC_CHANNEL_1
+#define LEDC_CHANNEL_BUZZER     LEDC_CHANNEL_2
+
+#define BUZZER_FREQ_HZ          1000
+#define BUZZER_RESOLUTION       LEDC_TIMER_8_BIT
+#define BUZZER_DUTY_ON          128    /* 50% duty – audible 1 kHz tone */
 
 #define SERVO_FREQ_HZ           50
 #define SERVO_RESOLUTION        LEDC_TIMER_16_BIT

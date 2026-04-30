@@ -47,15 +47,25 @@ typedef struct {
     uint8_t    payload_idx;
 } rx_parser_t;
 
-/* ── Helper: compute XOR checksum ───────────────────────────────── */
+/* ── CRC-8 (polynomial 0x07, initial value 0x00) ────────────────── */
+static uint8_t crc8_byte(uint8_t crc, uint8_t byte)
+{
+    crc ^= byte;
+    for (uint8_t i = 0; i < 8; i++) {
+        crc = (crc & 0x80u) ? (uint8_t)((crc << 1) ^ 0x07u) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static uint8_t calc_checksum(uint8_t msg_type, uint8_t payload_len,
                               const uint8_t *payload)
 {
-    uint8_t cs = msg_type ^ payload_len;
+    uint8_t crc = crc8_byte(0x00u, msg_type);
+    crc = crc8_byte(crc, payload_len);
     for (uint8_t i = 0; i < payload_len; i++) {
-        cs ^= payload[i];
+        crc = crc8_byte(crc, payload[i]);
     }
-    return cs;
+    return crc;
 }
 
 /* ── Helper: build and send one protocol frame ───────────────────── */
@@ -90,9 +100,7 @@ static void tx_sensor_data(bool failsafe_active)
     /* Convert internal float representation to wire integer format */
     sensor_data_t wire;
     wire.water_level    = (uint16_t)(snap.water_level_raw   < 0 ? 0 : snap.water_level_raw);
-    wire.soil_humidity  = 0u;   /* soil sensor not used in this project */
     wire.photoresistor  = (uint16_t)(snap.ldr_raw           < 0 ? 0 : snap.ldr_raw);
-    wire.steam_sensor   = (uint16_t)(snap.steam_raw         < 0 ? 0 : snap.steam_raw);
     wire.temperature    = (int16_t)(snap.temperature_c  * 10.0f);
     wire.humidity       = (uint16_t)(snap.humidity_pct  * 10.0f);
     wire.ultrasonic_mm  = (uint16_t)(snap.distance_cm   * 10.0f);  /* cm → mm */
@@ -102,7 +110,6 @@ static void tx_sensor_data(bool failsafe_active)
     wire.error_flags = 0;
     if (snap.err_ldr)         wire.error_flags |= ERROR_FLAG_LDR;
     if (snap.err_water_level) wire.error_flags |= ERROR_FLAG_WATER_LEVEL;
-    if (snap.err_steam)       wire.error_flags |= ERROR_FLAG_STEAM;
     if (snap.err_distance)    wire.error_flags |= ERROR_FLAG_DISTANCE;
     if (snap.err_temperature) wire.error_flags |= ERROR_FLAG_TEMPERATURE;
     if (snap.err_humidity)    wire.error_flags |= ERROR_FLAG_HUMIDITY;

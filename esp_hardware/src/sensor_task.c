@@ -8,6 +8,7 @@
  */
 
 #include "sensor_task.h"
+#include "roc_detector.h"
 #include "task_config.h"
 
 #include "freertos/FreeRTOS.h"
@@ -34,6 +35,32 @@ SemaphoreHandle_t g_sensor_mutex;
 /* ── ADC oneshot driver handle ───────────────────────────────────── */
 static adc_oneshot_unit_handle_t s_adc1_handle;
 
+/* ── RoC fault detectors (one per sensor, zero-initialised) ─────── */
+static roc_detector_t s_roc_ldr   = {0};
+static roc_detector_t s_roc_water = {0};
+
+/*
+ * LDR: a light switch in the same room can cause a large single-cycle jump
+ * (~800 counts) that immediately stabilises.  The detector only declares a
+ * fault after fault_confirm_n = 5 consecutive over-threshold readings (50 ms),
+ * which a real lighting change never produces.
+ *
+ * Water level: even aggressive manual refilling causes at most ~100 counts
+ * per 10 ms cycle (capacitive sensor + physical water rise).  A floating
+ * input can jump 2000+ counts per cycle.
+ */
+static const roc_params_t ROC_LDR_PARAMS = {
+    .delta_threshold  = 600,
+    .fault_confirm_n  = 5,
+    .recover_confirm_n = 3,
+};
+
+static const roc_params_t ROC_WATER_PARAMS = {
+    .delta_threshold  = 300,
+    .fault_confirm_n  = 3,
+    .recover_confirm_n = 3,
+};
+
 /* ── Plausibility helpers ────────────────────────────────────────── */
 static inline bool in_range_f(float v, float lo, float hi)
 {
@@ -55,7 +82,6 @@ static void adc_init(void)
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc1_handle, SENSOR_ADC_WATER_LEVEL, &ch_cfg));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc1_handle, SENSOR_ADC_LDR,         &ch_cfg));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc1_handle, SENSOR_ADC_STEAM,       &ch_cfg));
 }
 
 /* Read one ADC1 channel; returns -1 on driver error. */
@@ -242,15 +268,29 @@ void sensor_task(void *arg)
         /* ── ADC sensors ─────────────────────────────────────────── */
         local.water_level_raw = adc_read_raw(SENSOR_ADC_WATER_LEVEL);
         local.ldr_raw         = adc_read_raw(SENSOR_ADC_LDR);
-        local.steam_raw       = adc_read_raw(SENSOR_ADC_STEAM);
 
         local.err_water_level = (local.water_level_raw < 0);
         local.err_ldr         = (local.ldr_raw         < 0);
-        local.err_steam       = (local.steam_raw       < 0);
 
         if (local.err_water_level) { local.water_level_raw = 0; }
         if (local.err_ldr)         { local.ldr_raw         = 0; }
-        if (local.err_steam)       { local.steam_raw       = 0; }
+
+        /* ── RoC fault detection for LDR and water level ─────────────
+         * A driver error resets the detector so the first good reading
+         * after recovery is not compared against a stale last_value.
+         * If the RoC check fires, err_* is raised and the value is
+         * treated as invalid by all downstream consumers. */
+        if (local.err_ldr) {
+            roc_reset(&s_roc_ldr);
+        } else if (roc_update(&s_roc_ldr, &ROC_LDR_PARAMS, local.ldr_raw)) {
+            local.err_ldr = true;
+        }
+
+        if (local.err_water_level) {
+            roc_reset(&s_roc_water);
+        } else if (roc_update(&s_roc_water, &ROC_WATER_PARAMS, local.water_level_raw)) {
+            local.err_water_level = true;
+        }
 
         /* ── Digital sensors ─────────────────────────────────────── */
         local.pir_detected   = (gpio_get_level(SENSOR_PIN_PIR)    == 1);
@@ -333,13 +373,13 @@ void sensor_task(void *arg)
 
         /* ── Error state change logging ──────────────────────────── */
         bool any_error = local.err_water_level || local.err_ldr ||
-                         local.err_steam || local.err_distance ||
+                         local.err_distance ||
                          local.err_temperature || local.err_humidity;
         if (any_error != prev_any_error) {
             if (any_error) {
-                ESP_LOGW(TAG, "Sensor fault(s): wlvl=%d ldr=%d steam=%d dist=%d temp=%d hum=%d",
+                ESP_LOGW(TAG, "Sensor fault(s): wlvl=%d ldr=%d dist=%d temp=%d hum=%d",
                          local.err_water_level, local.err_ldr,
-                         local.err_steam, local.err_distance,
+                         local.err_distance,
                          local.err_temperature, local.err_humidity);
             } else {
                 ESP_LOGI(TAG, "All sensors OK");
@@ -349,14 +389,20 @@ void sensor_task(void *arg)
 
         /* ── Periodic debug log every 500 ms ─────────────────────── */
         if (log_counter == 0) {
+            char s_wlvl[8], s_ldr[8], s_dist[10], s_temp[10], s_hum[10];
+            if (local.err_water_level) snprintf(s_wlvl, sizeof(s_wlvl), " ERR");
+            else                       snprintf(s_wlvl, sizeof(s_wlvl), "%4d",   local.water_level_raw);
+            if (local.err_ldr)         snprintf(s_ldr,  sizeof(s_ldr),  " ERR");
+            else                       snprintf(s_ldr,  sizeof(s_ldr),  "%4d",   local.ldr_raw);
+            if (local.err_distance)    snprintf(s_dist, sizeof(s_dist), "  ERR");
+            else                       snprintf(s_dist, sizeof(s_dist), "%5.1f", local.distance_cm);
+            if (local.err_temperature) snprintf(s_temp, sizeof(s_temp), "  ERR");
+            else                       snprintf(s_temp, sizeof(s_temp), "%5.1f", local.temperature_c);
+            if (local.err_humidity)    snprintf(s_hum,  sizeof(s_hum),  "  ERR");
+            else                       snprintf(s_hum,  sizeof(s_hum),  "%5.1f", local.humidity_pct);
             ESP_LOGI(TAG,
-                     "wlvl=%4d ldr=%4d steam=%4d "
-                     "dist=%5.1fcm temp=%5.1fC hum=%5.1f%% "
-                     "pir=%d btn=%d err=%s",
-                     local.water_level_raw,
-                     local.ldr_raw, local.steam_raw,
-                     local.distance_cm,
-                     local.temperature_c, local.humidity_pct,
+                     "wlvl=%s ldr=%s dist=%scm temp=%sC hum=%s%% pir=%d btn=%d err=%s",
+                     s_wlvl, s_ldr, s_dist, s_temp, s_hum,
                      local.pir_detected, local.button_pressed,
                      any_error ? "YES" : "no");
         }

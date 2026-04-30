@@ -46,8 +46,8 @@
 /* UC3 water state thresholds (ADC raw counts, 12-bit / 0-4095)
  * OK: level > 1000 | REFILL: level <= 1000
  * 20-count hysteresis prevents chattering at the boundary */
-#define WATER_REFILL_ENTER          1000
-#define WATER_REFILL_EXIT           1020
+#define WATER_REFILL_ENTER          1100
+#define WATER_REFILL_EXIT           1110
 
 /* LDR day/night detection with hysteresis */
 #define LDR_NIGHT_ENTER_ADC         1100
@@ -66,9 +66,9 @@
 #define PERF_FAN_LOW_TEMP_D10       230
 #define PERF_FAN_HIGH_TEMP_D10      260
 
-/* Critical water buzzer: 200 ms beep every 2 s */
-#define WATER_BUZZER_PERIOD_CYCLES  200U
-#define WATER_BUZZER_ON_CYCLES      20U
+/* Night alarm: buzzer triggers when PIR detects movement while LED is on */
+#define NIGHT_ALARM_GUARD_MS        5000U  /* silence after NIGHT transition (servo settle) */
+#define NIGHT_ALARM_HOLD_MS         5000U  /* alarm stays on 5 s after last trigger         */
 
 #define CONTROL_LOG_INTERVAL_MS     1000
 

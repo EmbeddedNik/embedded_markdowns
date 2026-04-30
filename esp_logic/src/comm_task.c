@@ -55,15 +55,25 @@ typedef struct {
     uint8_t    payload_idx;
 } rx_parser_t;
 
-/* ── Helper: XOR checksum ────────────────────────────────────────── */
+/* ── CRC-8 (polynomial 0x07, initial value 0x00) ────────────────── */
+static uint8_t crc8_byte(uint8_t crc, uint8_t byte)
+{
+    crc ^= byte;
+    for (uint8_t i = 0; i < 8; i++) {
+        crc = (crc & 0x80u) ? (uint8_t)((crc << 1) ^ 0x07u) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static uint8_t calc_checksum(uint8_t msg_type, uint8_t payload_len,
                               const uint8_t *payload)
 {
-    uint8_t cs = msg_type ^ payload_len;
+    uint8_t crc = crc8_byte(0x00u, msg_type);
+    crc = crc8_byte(crc, payload_len);
     for (uint8_t i = 0; i < payload_len; i++) {
-        cs ^= payload[i];
+        crc = crc8_byte(crc, payload[i]);
     }
-    return cs;
+    return crc;
 }
 
 /* ── Helper: build and send one protocol frame ───────────────────── */

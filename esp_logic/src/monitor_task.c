@@ -71,10 +71,9 @@ void monitor_task(void *arg)
 
         if (snap.error_flags != last_err_flags) {
             if (snap.error_flags) {
-                ESP_LOGW(TAG, "Sensor fault(s): ldr=%d wlvl=%d steam=%d dist=%d temp=%d hum=%d",
+                ESP_LOGW(TAG, "Sensor fault(s): ldr=%d wlvl=%d dist=%d temp=%d hum=%d",
                          !!(snap.error_flags & ERROR_FLAG_LDR),
                          !!(snap.error_flags & ERROR_FLAG_WATER_LEVEL),
-                         !!(snap.error_flags & ERROR_FLAG_STEAM),
                          !!(snap.error_flags & ERROR_FLAG_DISTANCE),
                          !!(snap.error_flags & ERROR_FLAG_TEMPERATURE),
                          !!(snap.error_flags & ERROR_FLAG_HUMIDITY));

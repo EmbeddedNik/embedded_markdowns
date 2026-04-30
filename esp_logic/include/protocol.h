@@ -32,7 +32,7 @@
 
 #define ERROR_FLAG_LDR            ((uint8_t)0x01)  /* bit 0: photoresistor ADC failure */
 #define ERROR_FLAG_WATER_LEVEL    ((uint8_t)0x02)  /* bit 1: water level ADC failure */
-#define ERROR_FLAG_STEAM          ((uint8_t)0x04)  /* bit 2: steam sensor ADC failure */
+/* bit 2: reserved */
 #define ERROR_FLAG_DISTANCE       ((uint8_t)0x08)  /* bit 3: ultrasonic timeout */
 #define ERROR_FLAG_TEMPERATURE    ((uint8_t)0x10)  /* bit 4: DHT temperature failure */
 #define ERROR_FLAG_HUMIDITY       ((uint8_t)0x20)  /* bit 5: DHT humidity failure */
@@ -40,7 +40,7 @@
 #define ERROR_FLAG_UART_TIMEOUT   ((uint8_t)0x80)  /* bit 7: UART communication timeout */
 
 /* -------------------------------------------------------------------------
- * Sensor data payload – MSG_SENSOR_DATA (17 bytes, packed)
+ * Sensor data payload – MSG_SENSOR_DATA (13 bytes, packed)
  *
  * All floating-point values are scaled to integers:
  *   temperature: degrees C * 10  (e.g. 235 = 23.5 °C)
@@ -49,9 +49,7 @@
 
 typedef struct __attribute__((packed)) {
     uint16_t water_level;      /* raw ADC 0-4095 (io33) */
-    uint16_t soil_humidity;    /* raw ADC 0-4095 (io32) */
     uint16_t photoresistor;    /* raw ADC 0-4095 (io34) */
-    uint16_t steam_sensor;     /* raw ADC 0-4095 (io35) */
     int16_t  temperature;      /* degrees C * 10, range -400..800 (io17) */
     uint16_t humidity;         /* percent * 10, range 0..1000 (io17) */
     uint16_t ultrasonic_mm;    /* distance in mm, range 0..4000 (io12/io13) */
@@ -83,19 +81,19 @@ typedef struct {
     uint8_t msg_type;                          /* MSG_* constant */
     uint8_t payload_len;                       /* number of valid bytes in payload */
     uint8_t payload[PROTO_MAX_PAYLOAD_LEN];    /* message payload */
-    uint8_t checksum;                          /* XOR of msg_type, payload_len, all payload bytes */
+    uint8_t checksum;                          /* CRC-8 (poly 0x07) of msg_type, payload_len, payload */
 } uart_frame_t;
 
 /* -------------------------------------------------------------------------
  * Compile-time size verification
  *
- * sensor_data_t : 7 * uint16_t (14) + 3 * uint8_t (3) = 17 bytes (packed)
+ * sensor_data_t : 5 * uint16_t (10) + 3 * uint8_t (3) = 13 bytes (packed)
  * actuator_cmd_t: 7 * uint8_t  (7)                     =  7 bytes
  * uart_frame_t  : 3 * uint8_t  (3) + uint8_t[32] (32)
  *                 + 1 * uint8_t (1)                    = 36 bytes
  * ---------------------------------------------------------------------- */
 
-_Static_assert(sizeof(sensor_data_t)  == 17, "sensor_data_t must be 17 bytes (packed)");
+_Static_assert(sizeof(sensor_data_t)  == 13, "sensor_data_t must be 13 bytes (packed)");
 _Static_assert(sizeof(actuator_cmd_t) ==  7, "actuator_cmd_t must be 7 bytes");
 _Static_assert(sizeof(uart_frame_t)   == 36, "uart_frame_t must be 36 bytes");
 

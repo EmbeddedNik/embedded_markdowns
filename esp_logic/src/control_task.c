@@ -119,8 +119,9 @@ void control_task(void *arg)
     light_state_t light_state = LIGHT_STATE_DAY;
     uint32_t light_confirm_ticks = 0;
     system_profile_t last_profile = SYSTEM_PROFILE_NORMAL;
-    uint32_t last_log_ms = 0;
-    uint32_t buzzer_cycle = 0;
+    uint32_t last_log_ms   = 0;
+    uint32_t alarm_hold_ms  = 0;
+    uint32_t night_guard_ms = 0;
 
     for (;;) {
         esp_task_wdt_reset();
@@ -166,6 +167,9 @@ void control_task(void *arg)
                     if (++light_confirm_ticks >= (LDR_CONFIRM_MS / CONTROL_TASK_PERIOD_MS)) {
                         light_state = candidate;
                         light_confirm_ticks = 0;
+                        alarm_hold_ms  = 0;
+                        night_guard_ms = (light_state == LIGHT_STATE_NIGHT)
+                                         ? NIGHT_ALARM_GUARD_MS : 0u;
                         ESP_LOGI(TAG, "Light -> %s (ldr=%u)",
                                  light_state == LIGHT_STATE_DAY ? "DAY" : "NIGHT",
                                  snap.photoresistor);
@@ -193,15 +197,31 @@ void control_task(void *arg)
 
             cmd.display_mode = (uint8_t)water_state;
 
-            if (water_state == WATER_STATE_REFILL) {
-                buzzer_cycle = (buzzer_cycle + 1u) % WATER_BUZZER_PERIOD_CYCLES;
-                cmd.buzzer_on = (buzzer_cycle < WATER_BUZZER_ON_CYCLES) ? 1u : 0u;
+            /* Guard countdown: alarm is suppressed for NIGHT_ALARM_GUARD_MS after
+             * each NIGHT transition so the servo has time to settle. */
+            if (night_guard_ms >= CONTROL_TASK_PERIOD_MS) {
+                night_guard_ms -= CONTROL_TASK_PERIOD_MS;
             } else {
-                buzzer_cycle = 0;
-                cmd.buzzer_on = 0u;
+                night_guard_ms = 0;
             }
+
+            /* Night alarm: PIR only — ultrasonic is excluded because the closed
+             * servo hatch permanently sits in the sensor's field of view at night. */
+            bool alarm_armed = (light_state == LIGHT_STATE_NIGHT) && (night_guard_ms == 0);
+            if (alarm_armed && (snap.pir_detected != 0u)) {
+                if (alarm_hold_ms == 0) {
+                    ESP_LOGI(TAG, "Night alarm: PIR triggered");
+                }
+                alarm_hold_ms = NIGHT_ALARM_HOLD_MS;
+            } else if (alarm_hold_ms >= CONTROL_TASK_PERIOD_MS) {
+                alarm_hold_ms -= CONTROL_TASK_PERIOD_MS;
+            } else {
+                alarm_hold_ms = 0;
+            }
+            cmd.buzzer_on = (alarm_hold_ms > 0) ? 1u : 0u;
         } else {
             /* UART data stale: safe state for all actuators */
+            alarm_hold_ms      = 0;
             cmd.fan_speed      = 0u;
             cmd.led_on         = 0u;
             cmd.servo_position = SERVO_DAY_POSITION;
@@ -221,12 +241,26 @@ void control_task(void *arg)
         }
 
         if ((uint32_t)(now_ms - last_log_ms) >= CONTROL_LOG_INTERVAL_MS) {
+            char s_water[8], s_ldr[8], s_temp[10];
+            if (snap.error_flags & ERROR_FLAG_WATER_LEVEL)
+                snprintf(s_water, sizeof(s_water), "ERR");
+            else
+                snprintf(s_water, sizeof(s_water), "%u", snap.water_level);
+            if (snap.error_flags & ERROR_FLAG_LDR)
+                snprintf(s_ldr, sizeof(s_ldr), "ERR");
+            else
+                snprintf(s_ldr, sizeof(s_ldr), "%u", snap.photoresistor);
+            if (snap.error_flags & ERROR_FLAG_TEMPERATURE)
+                snprintf(s_temp, sizeof(s_temp), "ERR");
+            else
+                snprintf(s_temp, sizeof(s_temp), "%d.%dC",
+                         snap.temperature / 10,
+                         snap.temperature < 0 ? -(snap.temperature % 10) :
+                                                (snap.temperature % 10));
             ESP_LOGI(TAG,
-                     "UC3 profile=%s water=%u ldr=%u temp=%d.%dC -> fan=%u pump=%u led=%u servo=%u buzzer=%u",
-                     profile_name(profile), snap.water_level, snap.photoresistor,
-                     snap.temperature / 10,
-                     snap.temperature < 0 ? -(snap.temperature % 10) :
-                                            (snap.temperature % 10),
+                     "UC3 profile=%s water=%s ldr=%s temp=%s pir=%u -> fan=%u pump=%u led=%u servo=%u alarm=%u",
+                     profile_name(profile), s_water, s_ldr, s_temp,
+                     snap.pir_detected,
                      cmd.fan_speed, cmd.pump_on, cmd.led_on,
                      cmd.servo_position, cmd.buzzer_on);
             last_log_ms = now_ms;

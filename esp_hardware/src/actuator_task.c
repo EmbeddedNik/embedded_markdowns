@@ -64,6 +64,28 @@ static void ledc_init_servo(void)
     ledc_channel_config(&ch);
 }
 
+static void ledc_init_buzzer(void)
+{
+    ledc_timer_config_t timer = {
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .timer_num       = LEDC_TIMER_BUZZER,
+        .duty_resolution = BUZZER_RESOLUTION,
+        .freq_hz         = BUZZER_FREQ_HZ,
+        .clk_cfg         = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&timer);
+
+    ledc_channel_config_t ch = {
+        .gpio_num   = ACTUATOR_PIN_BUZZER,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel    = LEDC_CHANNEL_BUZZER,
+        .timer_sel  = LEDC_TIMER_BUZZER,
+        .duty       = 0,
+        .hpoint     = 0,
+    };
+    ledc_channel_config(&ch);
+}
+
 static void ledc_init_fan(void)
 {
     ledc_timer_config_t timer = {
@@ -92,7 +114,6 @@ static void gpio_outputs_init(void)
     const uint64_t output_mask =
         (1ULL << ACTUATOR_PIN_FAN_IN_N) |
         (1ULL << ACTUATOR_PIN_PUMP)     |
-        (1ULL << ACTUATOR_PIN_BUZZER)   |
         (1ULL << ACTUATOR_PIN_LED);
 
     gpio_config_t cfg = {
@@ -107,7 +128,6 @@ static void gpio_outputs_init(void)
     /* Safe initial states: all OFF */
     gpio_set_level(ACTUATOR_PIN_FAN_IN_N, 0);
     gpio_set_level(ACTUATOR_PIN_PUMP,     pump_gpio_level(false));
-    gpio_set_level(ACTUATOR_PIN_BUZZER,   0);
     gpio_set_level(ACTUATOR_PIN_LED,      0);
 }
 
@@ -259,6 +279,7 @@ void actuator_task_init(void)
     gpio_outputs_init();
     ledc_init_servo();
     ledc_init_fan();
+    ledc_init_buzzer();
 
     servo_disable();
     fan_set_speed(false, 0);
@@ -327,8 +348,10 @@ void actuator_task(void *arg)
         bool pump_on = pump_safety_update(&ps, cmd.pump_enable, ACTUATOR_TASK_PERIOD_MS);
         gpio_set_level(ACTUATOR_PIN_PUMP, pump_gpio_level(pump_on));
 
-        /* ── Buzzer ──────────────────────────────────────────────── */
-        gpio_set_level(ACTUATOR_PIN_BUZZER, cmd.buzzer_enable ? 1 : 0);
+        /* ── Buzzer (1 kHz PWM tone) ────────────────────────────── */
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_BUZZER,
+                      cmd.buzzer_enable ? BUZZER_DUTY_ON : 0u);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_BUZZER);
 
         /* ── LED ─────────────────────────────────────────────────── */
         gpio_set_level(ACTUATOR_PIN_LED, cmd.led_enable ? 1 : 0);
