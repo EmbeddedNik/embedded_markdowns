@@ -9,6 +9,7 @@
  */
 
 #include "comm_task.h"
+#include "proto_utils.h"
 #include "task_config.h"
 
 #include "freertos/FreeRTOS.h"
@@ -37,44 +38,6 @@ volatile uint8_t  g_rx_data_valid = 0;
 
 actuator_cmd_t    g_tx_actuator_cmd;
 SemaphoreHandle_t g_tx_cmd_mutex;
-
-/* ── Frame parser state machine ──────────────────────────────────── */
-typedef enum {
-    RX_WAIT_START = 0,
-    RX_MSG_TYPE,
-    RX_PAYLOAD_LEN,
-    RX_PAYLOAD,
-    RX_CHECKSUM,
-} rx_state_t;
-
-typedef struct {
-    rx_state_t state;
-    uint8_t    msg_type;
-    uint8_t    payload_len;
-    uint8_t    payload[PROTO_MAX_PAYLOAD_LEN];
-    uint8_t    payload_idx;
-} rx_parser_t;
-
-/* ── CRC-8 (polynomial 0x07, initial value 0x00) ────────────────── */
-static uint8_t crc8_byte(uint8_t crc, uint8_t byte)
-{
-    crc ^= byte;
-    for (uint8_t i = 0; i < 8; i++) {
-        crc = (crc & 0x80u) ? (uint8_t)((crc << 1) ^ 0x07u) : (uint8_t)(crc << 1);
-    }
-    return crc;
-}
-
-static uint8_t calc_checksum(uint8_t msg_type, uint8_t payload_len,
-                              const uint8_t *payload)
-{
-    uint8_t crc = crc8_byte(0x00u, msg_type);
-    crc = crc8_byte(crc, payload_len);
-    for (uint8_t i = 0; i < payload_len; i++) {
-        crc = crc8_byte(crc, payload[i]);
-    }
-    return crc;
-}
 
 /* ── Helper: build and send one protocol frame ───────────────────── */
 static void send_frame(uint8_t msg_type, const uint8_t *payload,
@@ -116,54 +79,6 @@ static void handle_frame(uint8_t msg_type, uint8_t payload_len,
         g_rx_sensor_timestamp_ms = (uint32_t)(esp_timer_get_time() / 1000LL);
     }
     /* MSG_ACK and unknown types are silently ignored */
-}
-
-/* ── Feed one byte into the RX state machine ─────────────────────── */
-static void rx_parse_byte(rx_parser_t *rx, uint8_t byte)
-{
-    switch (rx->state) {
-        case RX_WAIT_START:
-            if (byte == PROTO_START_BYTE) {
-                rx->state = RX_MSG_TYPE;
-            }
-            break;
-
-        case RX_MSG_TYPE:
-            rx->msg_type = byte;
-            rx->state    = RX_PAYLOAD_LEN;
-            break;
-
-        case RX_PAYLOAD_LEN:
-            if (byte > PROTO_MAX_PAYLOAD_LEN) {
-                ESP_LOGW(TAG, "Invalid payload_len %u – resyncing", byte);
-                rx->state = RX_WAIT_START;
-            } else {
-                rx->payload_len = byte;
-                rx->payload_idx = 0;
-                rx->state       = (byte > 0) ? RX_PAYLOAD : RX_CHECKSUM;
-            }
-            break;
-
-        case RX_PAYLOAD:
-            rx->payload[rx->payload_idx++] = byte;
-            if (rx->payload_idx >= rx->payload_len) {
-                rx->state = RX_CHECKSUM;
-            }
-            break;
-
-        case RX_CHECKSUM: {
-            uint8_t expected = calc_checksum(rx->msg_type, rx->payload_len,
-                                             rx->payload);
-            if (byte != expected) {
-                ESP_LOGW(TAG, "Checksum mismatch: got 0x%02X expected 0x%02X",
-                         byte, expected);
-            } else {
-                handle_frame(rx->msg_type, rx->payload_len, rx->payload);
-            }
-            rx->state = RX_WAIT_START;
-            break;
-        }
-    }
 }
 
 /* ── Send latest g_tx_actuator_cmd ───────────────────────────────── */
@@ -227,7 +142,12 @@ void comm_task(void *arg)
         /* ── RX: drain UART buffer through state machine ─────────── */
         uint8_t byte;
         while (uart_read_bytes(COMM_UART_NUM, &byte, 1, 0) > 0) {
-            rx_parse_byte(&rx, byte);
+            parse_result_t res = rx_parse_byte(&rx, byte);
+            if (res == PARSE_COMPLETE) {
+                handle_frame(rx.msg_type, rx.payload_len, rx.payload);
+            } else if (res == PARSE_ERROR) {
+                ESP_LOGW(TAG, "Frame error – resyncing");
+            }
         }
 
         /* ── Heartbeat timeout monitoring ────────────────────────── */

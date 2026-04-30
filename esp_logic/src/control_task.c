@@ -8,6 +8,7 @@
  */
 
 #include "control_task.h"
+#include "control_logic.h"
 #include "comm_task.h"
 #include "display_task.h"
 #include "task_config.h"
@@ -27,81 +28,6 @@
 static const char *TAG = "control_task";
 
 volatile system_profile_t g_active_profile = SYSTEM_PROFILE_NORMAL;
-
-typedef enum {
-    WATER_STATE_OK     = 0,
-    WATER_STATE_REFILL = 1,
-} water_state_t;
-
-typedef enum {
-    LIGHT_STATE_DAY = 0,
-    LIGHT_STATE_NIGHT = 1,
-} light_state_t;
-
-typedef struct {
-    int16_t fan_low_d10;
-    int16_t fan_high_d10;
-} profile_thresholds_t;
-
-static const char *profile_name(system_profile_t profile)
-{
-    switch (profile) {
-        case SYSTEM_PROFILE_ECO:         return "ECO";
-        case SYSTEM_PROFILE_NORMAL:      return "NORMAL";
-        case SYSTEM_PROFILE_PERFORMANCE: return "PERFORMANCE";
-        default:                         return "UNKNOWN";
-    }
-}
-
-static profile_thresholds_t thresholds_for_profile(system_profile_t profile)
-{
-    switch (profile) {
-        case SYSTEM_PROFILE_ECO:
-            return (profile_thresholds_t){
-                .fan_low_d10 = ECO_FAN_LOW_TEMP_D10,
-                .fan_high_d10 = ECO_FAN_HIGH_TEMP_D10,
-            };
-        case SYSTEM_PROFILE_PERFORMANCE:
-            return (profile_thresholds_t){
-                .fan_low_d10 = PERF_FAN_LOW_TEMP_D10,
-                .fan_high_d10 = PERF_FAN_HIGH_TEMP_D10,
-            };
-        case SYSTEM_PROFILE_NORMAL:
-        default:
-            return (profile_thresholds_t){
-                .fan_low_d10 = NORMAL_FAN_LOW_TEMP_D10,
-                .fan_high_d10 = NORMAL_FAN_HIGH_TEMP_D10,
-            };
-    }
-}
-
-static water_state_t water_state_update(water_state_t current, uint16_t water_level)
-{
-    if (current == WATER_STATE_REFILL) {
-        return (water_level >= WATER_REFILL_EXIT) ? WATER_STATE_OK : WATER_STATE_REFILL;
-    }
-    return (water_level <= WATER_REFILL_ENTER) ? WATER_STATE_REFILL : WATER_STATE_OK;
-}
-
-static light_state_t light_state_update(light_state_t current, uint16_t ldr_adc)
-{
-    if (current == LIGHT_STATE_NIGHT) {
-        return (ldr_adc >= LDR_DAY_ENTER_ADC) ? LIGHT_STATE_DAY : LIGHT_STATE_NIGHT;
-    }
-    return (ldr_adc <= LDR_NIGHT_ENTER_ADC) ? LIGHT_STATE_NIGHT : LIGHT_STATE_DAY;
-}
-
-static uint8_t fan_speed_for_temperature(int16_t temp_d10,
-                                         profile_thresholds_t thresholds)
-{
-    if (temp_d10 >= thresholds.fan_high_d10) {
-        return 2u;
-    }
-    if (temp_d10 >= thresholds.fan_low_d10) {
-        return 1u;
-    }
-    return 0u;
-}
 
 void control_task_init(void)
 {
