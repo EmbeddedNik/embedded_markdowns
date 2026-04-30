@@ -27,14 +27,19 @@
 /* Initialise I2C bus and LCD (call once from actuator_task_init) */
 esp_err_t lcd_init(void);
 
+/* Re-run HD44780 init sequence only — I2C bus must already be up.
+ * Call after a write error to recover from relay-noise corruption. */
+esp_err_t lcd_reinit(void);
+
 /* Clear all characters and return cursor home */
 void lcd_clear(void);
 
-/* Place cursor at zero-based (col, row) */
-void lcd_set_cursor(uint8_t col, uint8_t row);
+/* Place cursor at zero-based (col, row); returns ESP_OK or I2C error */
+esp_err_t lcd_set_cursor(uint8_t col, uint8_t row);
 
-/* Write a null-terminated string at current cursor position */
-void lcd_write_string(const char *str);
+/* Write a null-terminated string at current cursor position;
+ * returns first I2C error encountered, or ESP_OK */
+esp_err_t lcd_write_string(const char *str);
 
 /* Control backlight (1 = on, 0 = off) */
 void lcd_backlight(uint8_t on);

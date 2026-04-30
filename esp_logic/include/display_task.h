@@ -16,10 +16,8 @@
  * actuator_cmd_t.display_mode sent to esp_hardware.
  */
 typedef enum {
-    SYS_STATE_NORMAL   = 0,
-    SYS_STATE_WARNING  = 1,
-    SYS_STATE_CRITICAL = 2,
-    SYS_STATE_ALARM    = 3,
+    SYS_STATE_OK     = 0,
+    SYS_STATE_REFILL = 1,
 } system_state_t;
 
 /* Written by control_task; read by display_task */

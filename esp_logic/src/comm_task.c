@@ -160,12 +160,9 @@ static void rx_parse_byte(rx_parser_t *rx, uint8_t byte)
 static void tx_actuator_cmd(void)
 {
     actuator_cmd_t snap;
-    if (xSemaphoreTake(g_tx_cmd_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+    if (xSemaphoreTake(g_tx_cmd_mutex, portMAX_DELAY) == pdTRUE) {
         snap = g_tx_actuator_cmd;
         xSemaphoreGive(g_tx_cmd_mutex);
-    } else {
-        ESP_LOGW(TAG, "TX cmd mutex timeout – skipping TX");
-        return;
     }
     send_frame(MSG_ACTUATOR_CMD, (const uint8_t *)&snap, (uint8_t)sizeof(snap));
 }

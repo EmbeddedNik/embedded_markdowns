@@ -21,12 +21,12 @@
 static const char *TAG = "display_task";
 
 /* Shared system state written by control_task and read by display_task. */
-volatile system_state_t g_system_state = SYS_STATE_NORMAL;
+volatile system_state_t g_system_state = SYS_STATE_OK;
 
 /* ── Public init ─────────────────────────────────────────────────── */
 void display_task_init(void)
 {
-    g_system_state = SYS_STATE_NORMAL;
+    g_system_state = SYS_STATE_OK;
 }
 
 /* ── Task loop ───────────────────────────────────────────────────── */
@@ -35,7 +35,7 @@ void display_task(void *arg)
     esp_task_wdt_add(NULL);
 
     TickType_t        last_wake    = xTaskGetTickCount();
-    system_state_t    last_state   = SYS_STATE_NORMAL;
+    system_state_t    last_state   = SYS_STATE_OK;
 
     for (;;) {
         esp_task_wdt_reset();
@@ -49,11 +49,9 @@ void display_task(void *arg)
         }
 
         /* Write display_mode into the outgoing actuator command */
-        if (xSemaphoreTake(g_tx_cmd_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        if (xSemaphoreTake(g_tx_cmd_mutex, portMAX_DELAY) == pdTRUE) {
             g_tx_actuator_cmd.display_mode = (uint8_t)current_state;
             xSemaphoreGive(g_tx_cmd_mutex);
-        } else {
-            ESP_LOGW(TAG, "TX cmd mutex timeout");
         }
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(DISPLAY_TASK_PERIOD_MS));

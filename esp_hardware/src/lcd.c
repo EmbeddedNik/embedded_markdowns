@@ -10,6 +10,7 @@
 #include "lcd.h"
 
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "rom/ets_sys.h"
 #include "freertos/FreeRTOS.h"
@@ -67,9 +68,53 @@ static esp_err_t lcd_write_byte(uint8_t byte, uint8_t rs_flag)
 static esp_err_t lcd_cmd(uint8_t cmd)  { return lcd_write_byte(cmd, 0);      }
 static esp_err_t lcd_data(uint8_t d)   { return lcd_write_byte(d,   PCF_RS); }
 
+/* ── HD44780 controller init sequence (I2C bus must already be up) ── */
+static esp_err_t lcd_hw_init(void)
+{
+    esp_err_t ret;
+
+    /* Put PCF8574 expander into known state before starting the
+     * HD44780 init sequence — all bits low, including EN and RS. */
+    pcf8574_write(0x00);
+    ets_delay_us(1000);
+
+    /* HD44780 4-bit init sequence per datasheet figure 24.
+     * All three delays must meet the datasheet minimums exactly:
+     *   INIT_1: >4.1 ms,  INIT_2: >4.1 ms,  INIT_3: >100 µs */
+    ret = lcd_send_nibble(0x03, 0);
+    if (ret != ESP_OK) return ret;
+    ets_delay_us(4500);                     /* INIT_1: >4.1 ms */
+
+    ret = lcd_send_nibble(0x03, 0);
+    if (ret != ESP_OK) return ret;
+    ets_delay_us(4500);                     /* INIT_2: >4.1 ms (was 150 µs – bug fix) */
+
+    ret = lcd_send_nibble(0x03, 0);
+    if (ret != ESP_OK) return ret;
+    ets_delay_us(150);                      /* INIT_3: >100 µs */
+
+    ret = lcd_send_nibble(0x02, 0);         /* switch to 4-bit mode */
+    if (ret != ESP_OK) return ret;
+
+    if ((ret = lcd_cmd(LCD_CMD_FUNCTION_SET)) != ESP_OK) return ret;
+    if ((ret = lcd_cmd(LCD_CMD_DISPLAY_ON))   != ESP_OK) return ret;
+    if ((ret = lcd_cmd(LCD_CMD_CLEAR))         != ESP_OK) return ret;
+    vTaskDelay(pdMS_TO_TICKS(2));           /* clear needs >1.52 ms */
+    if ((ret = lcd_cmd(LCD_CMD_ENTRY_MODE))    != ESP_OK) return ret;
+
+    return ESP_OK;
+}
+
 /* ── Public: initialise I2C bus and LCD ──────────────────────────── */
 esp_err_t lcd_init(void)
 {
+    /* Reset GPIO pins to their default state before the I2C master driver
+     * claims them.  Without this the ESP-IDF 5.x new I2C driver reports
+     * "gpio X is not usable, maybe conflict with others" even when no other
+     * peripheral is actually using the pins. */
+    gpio_reset_pin(LCD_I2C_SDA_PIN);
+    gpio_reset_pin(LCD_I2C_SCL_PIN);
+
     /* I2C master bus */
     i2c_master_bus_config_t bus_cfg = {
         .i2c_port          = LCD_I2C_PORT,
@@ -97,33 +142,35 @@ esp_err_t lcd_init(void)
         return ret;
     }
 
-    /* HD44780 4-bit initialisation sequence */
-    vTaskDelay(pdMS_TO_TICKS(50));          /* >40 ms power-on delay */
+    /* Power-on delay: HD44780 requires >40 ms after Vcc rises to 2.7 V.
+     * Only needed on cold init — lcd_reinit() skips this. */
+    vTaskDelay(pdMS_TO_TICKS(50));
 
-    ret = lcd_send_nibble(0x03, 0);
-    if (ret != ESP_OK) goto fail;
-    vTaskDelay(pdMS_TO_TICKS(5));
-    ret = lcd_send_nibble(0x03, 0);
-    if (ret != ESP_OK) goto fail;
-    ets_delay_us(150);
-    ret = lcd_send_nibble(0x03, 0);
-    if (ret != ESP_OK) goto fail;
-    ets_delay_us(150);
-    ret = lcd_send_nibble(0x02, 0);               /* switch to 4-bit mode  */
-    if (ret != ESP_OK) goto fail;
-
-    if ((ret = lcd_cmd(LCD_CMD_FUNCTION_SET)) != ESP_OK) goto fail;
-    if ((ret = lcd_cmd(LCD_CMD_DISPLAY_ON)) != ESP_OK) goto fail;
-    if ((ret = lcd_cmd(LCD_CMD_CLEAR)) != ESP_OK) goto fail;
-    vTaskDelay(pdMS_TO_TICKS(2));
-    if ((ret = lcd_cmd(LCD_CMD_ENTRY_MODE)) != ESP_OK) goto fail;
+    ret = lcd_hw_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "LCD hw init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     ESP_LOGI(TAG, "LCD1602 initialised (I2C addr=0x%02X SDA=%d SCL=%d)",
              LCD_I2C_ADDR, LCD_I2C_SDA_PIN, LCD_I2C_SCL_PIN);
     return ESP_OK;
+}
 
-fail:
-    ESP_LOGE(TAG, "LCD init write failed: %s", esp_err_to_name(ret));
+/* ── Public: re-run HD44780 init without touching the I2C bus ──────── */
+esp_err_t lcd_reinit(void)
+{
+    /* A corrupted mid-transfer can leave the PCF8574 holding SDA low,
+     * stalling the bus.  Send up to 9 clock pulses to free it before
+     * re-running the HD44780 init sequence. */
+    i2c_master_bus_reset(s_bus_handle);
+
+    esp_err_t ret = lcd_hw_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "LCD reinit failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "LCD reinitialised after error");
+    }
     return ret;
 }
 
@@ -135,19 +182,22 @@ void lcd_clear(void)
 }
 
 /* ── Public: set cursor position ─────────────────────────────────── */
-void lcd_set_cursor(uint8_t col, uint8_t row)
+esp_err_t lcd_set_cursor(uint8_t col, uint8_t row)
 {
     if (row >= LCD_ROWS) row = LCD_ROWS - 1;
     if (col >= LCD_COLS) col = LCD_COLS - 1;
-    lcd_cmd(0x80 | (ROW_ADDR[row] + col));
+    return lcd_cmd(0x80 | (ROW_ADDR[row] + col));
 }
 
 /* ── Public: write string ────────────────────────────────────────── */
-void lcd_write_string(const char *str)
+esp_err_t lcd_write_string(const char *str)
 {
+    esp_err_t ret = ESP_OK;
     while (*str) {
-        lcd_data((uint8_t)*str++);
+        esp_err_t r = lcd_data((uint8_t)*str++);
+        if (r != ESP_OK && ret == ESP_OK) ret = r;
     }
+    return ret;
 }
 
 /* ── Public: backlight control ───────────────────────────────────── */

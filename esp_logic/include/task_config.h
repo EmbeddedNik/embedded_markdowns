@@ -43,11 +43,11 @@
 #define HWM_LOG_INTERVAL_CYCLES     10
 #define TASK_MIN_STACK_HWM          512
 
-/* UC3 water state: only warning/notification, no actuator lockout */
-#define WATER_WARNING_ENTER         1200
-#define WATER_WARNING_EXIT          1300
-#define WATER_CRITICAL_ENTER        1000
-#define WATER_CRITICAL_EXIT         1100
+/* UC3 water state thresholds (ADC raw counts, 12-bit / 0-4095)
+ * OK: level > 1000 | REFILL: level <= 1000
+ * 20-count hysteresis prevents chattering at the boundary */
+#define WATER_REFILL_ENTER          1000
+#define WATER_REFILL_EXIT           1020
 
 /* LDR day/night detection with hysteresis */
 #define LDR_NIGHT_ENTER_ADC         1100

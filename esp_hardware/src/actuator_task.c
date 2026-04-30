@@ -202,9 +202,7 @@ static const char *profile_label(uint8_t profile)
 static const char *water_label(uint8_t display_mode)
 {
     switch (display_mode) {
-        case 1:  return "WARNING";
-        case 2:  return "CRITICAL";
-        case 3:  return "ALARM";
+        case 1:  return "REFILL";
         case 0:
         default: return "OK";
     }
@@ -222,13 +220,34 @@ static void lcd_refresh(uint8_t display_mode, uint8_t profile)
     snprintf(line1, sizeof(line1), "PROFILE:%-8s", profile_label(profile));
     snprintf(line2, sizeof(line2), "WATER:%-10s",  water_label(display_mode));
 
-    /* No lcd_clear(): relay switching injects noise on the I2C bus; the 2ms
-     * blank period from clear + vTaskDelay is when corruption is most likely.
-     * Overwriting 16 padded chars per line avoids blanking and is sufficient. */
-    lcd_set_cursor(0, 0);
-    lcd_write_string(line1);
-    lcd_set_cursor(0, 1);
-    lcd_write_string(line2);
+    /* Attempt to write both lines. */
+    bool ok =
+        (lcd_set_cursor(0, 0)    == ESP_OK) &&
+        (lcd_write_string(line1) == ESP_OK) &&
+        (lcd_set_cursor(0, 1)    == ESP_OK) &&
+        (lcd_write_string(line2) == ESP_OK);
+
+    if (ok) return;
+
+    /* Write failed (relay noise / I2C glitch).  Reset the bus and the HD44780
+     * controller, then try once more.  On any failure we return without
+     * disabling the LCD — the next 500 ms cycle will retry automatically.
+     * s_lcd_available is only cleared in lcd_init() when hardware is absent. */
+    ESP_LOGW(TAG, "LCD write error – resetting bus and controller");
+    if (lcd_reinit() != ESP_OK) {
+        ESP_LOGW(TAG, "LCD reinit failed – retrying next cycle");
+        return;
+    }
+
+    ok =
+        (lcd_set_cursor(0, 0)    == ESP_OK) &&
+        (lcd_write_string(line1) == ESP_OK) &&
+        (lcd_set_cursor(0, 1)    == ESP_OK) &&
+        (lcd_write_string(line2) == ESP_OK);
+
+    if (!ok) {
+        ESP_LOGW(TAG, "LCD write failed after reinit – retrying next cycle");
+    }
 }
 
 /* ── Public init ─────────────────────────────────────────────────── */

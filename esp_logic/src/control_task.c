@@ -29,9 +29,8 @@ static const char *TAG = "control_task";
 volatile system_profile_t g_active_profile = SYSTEM_PROFILE_NORMAL;
 
 typedef enum {
-    WATER_STATE_OK = 0,
-    WATER_STATE_WARNING = 1,
-    WATER_STATE_CRITICAL = 2,
+    WATER_STATE_OK     = 0,
+    WATER_STATE_REFILL = 1,
 } water_state_t;
 
 typedef enum {
@@ -78,32 +77,10 @@ static profile_thresholds_t thresholds_for_profile(system_profile_t profile)
 
 static water_state_t water_state_update(water_state_t current, uint16_t water_level)
 {
-    switch (current) {
-        case WATER_STATE_CRITICAL:
-            if (water_level >= WATER_CRITICAL_EXIT) {
-                return WATER_STATE_WARNING;
-            }
-            return WATER_STATE_CRITICAL;
-
-        case WATER_STATE_WARNING:
-            if (water_level <= WATER_CRITICAL_ENTER) {
-                return WATER_STATE_CRITICAL;
-            }
-            if (water_level >= WATER_WARNING_EXIT) {
-                return WATER_STATE_OK;
-            }
-            return WATER_STATE_WARNING;
-
-        case WATER_STATE_OK:
-        default:
-            if (water_level <= WATER_CRITICAL_ENTER) {
-                return WATER_STATE_CRITICAL;
-            }
-            if (water_level <= WATER_WARNING_ENTER) {
-                return WATER_STATE_WARNING;
-            }
-            return WATER_STATE_OK;
+    if (current == WATER_STATE_REFILL) {
+        return (water_level >= WATER_REFILL_EXIT) ? WATER_STATE_OK : WATER_STATE_REFILL;
     }
+    return (water_level <= WATER_REFILL_ENTER) ? WATER_STATE_REFILL : WATER_STATE_OK;
 }
 
 static light_state_t light_state_update(light_state_t current, uint16_t ldr_adc)
@@ -216,7 +193,7 @@ void control_task(void *arg)
 
             cmd.display_mode = (uint8_t)water_state;
 
-            if (water_state == WATER_STATE_CRITICAL) {
+            if (water_state == WATER_STATE_REFILL) {
                 buzzer_cycle = (buzzer_cycle + 1u) % WATER_BUZZER_PERIOD_CYCLES;
                 cmd.buzzer_on = (buzzer_cycle < WATER_BUZZER_ON_CYCLES) ? 1u : 0u;
             } else {
@@ -230,7 +207,7 @@ void control_task(void *arg)
             cmd.servo_position = SERVO_DAY_POSITION;
             cmd.pump_on        = 0u;
             cmd.buzzer_on      = 0u;
-            cmd.display_mode   = SYS_STATE_WARNING;
+            cmd.display_mode   = SYS_STATE_REFILL;
         }
 
         if (profile != last_profile) {
@@ -255,11 +232,9 @@ void control_task(void *arg)
             last_log_ms = now_ms;
         }
 
-        if (xSemaphoreTake(g_tx_cmd_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        if (xSemaphoreTake(g_tx_cmd_mutex, portMAX_DELAY) == pdTRUE) {
             g_tx_actuator_cmd = cmd;
             xSemaphoreGive(g_tx_cmd_mutex);
-        } else {
-            ESP_LOGW(TAG, "TX cmd mutex timeout");
         }
 
         g_system_state = (system_state_t)cmd.display_mode;

@@ -70,7 +70,7 @@ typedef struct {
     uint8_t  servo_position;   /* 0 = closed, 100 = open (io26) */
     uint8_t  led_on;           /* 0 = off, 1 = on (io27) */
     uint8_t  buzzer_on;        /* 0 = off, 1 = on (io16) */
-    uint8_t  display_mode;     /* 0 = normal, 1 = warning, 2 = critical, 3 = alarm */
+    uint8_t  display_mode;     /* 0 = OK, 1 = REFILL */
     uint8_t  profile;          /* 0 = eco, 1 = normal, 2 = performance */
 } actuator_cmd_t;
 
