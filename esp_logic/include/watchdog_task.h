@@ -17,6 +17,7 @@ extern TaskHandle_t g_comm_task_handle;
 extern TaskHandle_t g_display_task_handle;
 extern TaskHandle_t g_monitor_task_handle;
 extern TaskHandle_t g_serial_task_handle;
+extern TaskHandle_t g_wifi_task_handle;
 extern TaskHandle_t g_watchdog_task_handle;
 
 /* ── Public API ──────────────────────────────────────────────────── */
