@@ -1,0 +1,10 @@
+flowchart TD
+    A["Define use cases and constraints"] --> B["Design modular architecture"]
+    B --> C["Implement ESP-IDF/FreeRTOS modules"]
+    C --> D["Use AI assistance<br/>GitHub agent and IDE pair-programming"]
+    D --> E["Build and flash both ESP32 projects"]
+    E --> F["Validate on real hardware"]
+    F --> G["Observe behavior through logs, LCD and Web UI"]
+    G --> H["Refine implementation"]
+    H --> I["Document architecture, behavior and AI workflow"]
+    H --> C

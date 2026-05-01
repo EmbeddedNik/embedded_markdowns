@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph H["esp_hardware - Smart Farm Kit"]
+        HS["Sensor task<br/>ADC, GPIO, DHT, ultrasonic"]
+        HA["Actuator task<br/>pump, fan, servo, LED, buzzer, LCD"]
+        HC["Communication task<br/>UART2 protocol"]
+        HW["Watchdog task"]
+    end
+
+    subgraph L["esp_logic - Logic and Control"]
+        LC["Communication task<br/>UART2 protocol"]
+        CTRL["Control task<br/>state and control logic"]
+        MON["Monitor task<br/>freshness and warnings"]
+        SER["Serial task<br/>profile input"]
+        WIFI["WiFi task<br/>SoftAP, HTTP, Web UI"]
+        LW["Watchdog task"]
+    end
+
+    KIT["Smart Farm sensors"] --> HS
+    HA --> ACT["Smart Farm actuators"]
+    HS --> HC
+    HC <-->|"UART2 frames"| LC
+    LC --> CTRL
+    CTRL --> LC
+    CTRL --> MON
+    SER --> CTRL
+    WIFI --> CTRL
+    WIFI --> UI["Browser dashboard"]
+    HC --> HA

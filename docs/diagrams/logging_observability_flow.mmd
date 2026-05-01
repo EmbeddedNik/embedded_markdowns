@@ -1,0 +1,15 @@
+flowchart LR
+    SYS["Embedded runtime"] --> LOG["Serial logs"]
+    SYS --> WEB["Web UI"]
+    SYS --> LCD["LCD display"]
+    SYS --> TEST["Host-side unit tests"]
+
+    LOG --> D1["Debug timing, communication,<br/>state changes and faults"]
+    WEB --> D2["Observe current sensor values<br/>and profile state"]
+    LCD --> D3["Local state feedback<br/>profile and water state"]
+    TEST --> D4["Verify pure protocol and<br/>control logic modules"]
+
+    D1 --> THESIS["Evidence for evaluation<br/>and discussion"]
+    D2 --> THESIS
+    D3 --> THESIS
+    D4 --> THESIS

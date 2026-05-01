@@ -1,0 +1,15 @@
+flowchart TD
+    A["sensor_task cycle"] --> ADC["Read ADC sensors<br/>water level and LDR"]
+    ADC --> ROC["Check implausible jumps<br/>rate-of-change detection"]
+    ROC --> D["Read digital inputs<br/>PIR and button"]
+    D --> US["Measure ultrasonic distance<br/>with timeout"]
+    US --> DHT{"DHT read interval reached?"}
+    DHT -- yes --> DHTR["Read DHT<br/>retry once on timing failure"]
+    DHT -- no --> OLD["Reuse previous DHT values"]
+    DHTR --> P["Apply plausibility checks<br/>and preserve last good values"]
+    OLD --> P
+    P --> M["Publish protected sensor snapshot"]
+    M --> LOG{"Log interval or error transition?"}
+    LOG -- yes --> L["Write serial diagnostic log"]
+    LOG -- no --> END["Wait until next cycle"]
+    L --> END

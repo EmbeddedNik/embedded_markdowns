@@ -1,0 +1,16 @@
+stateDiagram-v2
+    [*] --> DAY
+    DAY --> NIGHT: low LDR value confirmed
+    NIGHT --> DAY: high LDR value confirmed
+
+    DAY: servo in day position
+    DAY: night alarm inactive
+    NIGHT: servo in night position
+    NIGHT: PIR alarm can be armed after guard time
+
+    state NIGHT {
+        [*] --> Guard
+        Guard --> Armed: guard time elapsed
+        Armed --> Alarm: PIR movement detected
+        Alarm --> Armed: alarm hold time elapsed
+    }

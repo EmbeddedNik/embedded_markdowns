@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph G["GitHub agent workflow"]
+        G1["Create issue"] --> G2["Mention Claude"]
+        G2 --> G3["Claude Code Action runs"]
+        G3 --> G4["Feature branch"]
+        G4 --> G5["PR / merge conflicts possible"]
+    end
+
+    subgraph I["IDE assistant workflow"]
+        I1["Open code in VS Code"] --> I2["Ask Claude/Codex"]
+        I2 --> I3["Inspect code and run tools"]
+        I3 --> I4["Patch locally"]
+        I4 --> I5["Flash and test hardware"]
+        I5 --> I2
+    end
+
+    G5 --> R["Human review and integration"]
+    I5 --> R
+    R --> M["Validated software state"]

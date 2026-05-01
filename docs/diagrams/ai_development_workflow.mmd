@@ -1,0 +1,12 @@
+flowchart LR
+    Issue["GitHub issue<br/>use case task"] --> Mention["@claude in issue"]
+    Mention --> Action["Claude Code GitHub Action"]
+    Action --> Branch["AI-created feature branch"]
+    Branch --> PR["Pull request / branch review"]
+    PR --> Local["Local VS Code integration<br/>Claude Code + Codex"]
+    Local --> Test["Build, flash, hardware test"]
+    Test --> Fix["Manual corrections and integration"]
+    Fix --> Main["Merge into main after validation"]
+
+    CLAUDE["CLAUDE.md<br/>agent rules and project context"] --> Action
+    CLAUDE --> Local

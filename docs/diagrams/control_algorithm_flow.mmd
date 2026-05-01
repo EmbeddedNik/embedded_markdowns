@@ -1,0 +1,28 @@
+flowchart TD
+    A["Start control cycle"] --> B{"Fresh sensor data available?"}
+    B -- no --> SAFE["Generate safe actuator command<br/>fan off, pump off, alarm off,<br/>day servo position, REFILL display"]
+    B -- yes --> C["Copy latest sensor snapshot"]
+
+    C --> W{"Water sensor valid?"}
+    W -- yes --> W2["Update water state<br/>OK or REFILL with hysteresis"]
+    W -- no --> W3["Keep previous water state"]
+
+    W2 --> L
+    W3 --> L
+    L{"LDR valid?"} -- yes --> L2["Evaluate day/night candidate<br/>apply confirmation time"]
+    L -- no --> L3["Keep previous light state"]
+
+    L2 --> F
+    L3 --> F
+    F{"Temperature/humidity valid?"} -- yes --> F2["Calculate fan command<br/>using active profile thresholds"]
+    F -- no --> F3["Fan off"]
+
+    F2 --> A1["Set LED and servo from light state"]
+    F3 --> A1
+    A1 --> P["Set pump from button request"]
+    P --> AL{"Night mode and PIR detected<br/>after guard time?"}
+    AL -- yes --> AL2["Activate alarm hold<br/>buzzer on"]
+    AL -- no --> AL3["Update alarm hold countdown"]
+    AL2 --> OUT["Publish actuator command"]
+    AL3 --> OUT
+    SAFE --> OUT

@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant User as User device
+    participant WiFi as SmartFarm-ESP32 WLAN
+    participant Web as esp_logic wifi_task
+    participant Ctrl as control_task state
+    participant Comm as comm_task sensor snapshot
+
+    User->>WiFi: connect to SoftAP
+    User->>Web: GET /
+    Web-->>User: HTML dashboard
+
+    loop every dashboard refresh
+        User->>Web: GET /api/data
+        Web->>Comm: read latest sensor snapshot
+        Web->>Ctrl: read water state and profile
+        Web-->>User: JSON sensor and state data
+    end
+
+    opt user changes fan profile
+        User->>Web: POST /api/fan
+        Web->>Ctrl: update active profile
+        Ctrl-->>Comm: next actuator command contains new profile
+    end
