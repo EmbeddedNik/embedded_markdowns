@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\Niklas\\\\Documents\\\\embedded_markdowns\\\\docs\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)"
+    ]
+  }
+}
