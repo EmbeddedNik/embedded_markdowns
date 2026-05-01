@@ -17,6 +17,7 @@
 #include "monitor_task.h"
 #include "serial_task.h"
 #include "watchdog_task.h"
+#include "wifi_task.h"
 
 static const char *TAG = "main";
 
@@ -57,6 +58,9 @@ void app_main(void)
 
     xTaskCreate(watchdog_task, "watchdog_task", WATCHDOG_TASK_STACK_SIZE,
                 NULL, WATCHDOG_TASK_PRIORITY, &g_watchdog_task_handle);
+
+    xTaskCreate(wifi_task,     "wifi_task",     WIFI_TASK_STACK_SIZE,
+                NULL, WIFI_TASK_PRIORITY,     NULL);
 
     configASSERT(g_control_task_handle  != NULL);
     configASSERT(g_comm_task_handle     != NULL);
