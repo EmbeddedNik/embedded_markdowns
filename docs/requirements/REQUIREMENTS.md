@@ -2,7 +2,7 @@
 
 ## Projektübersicht
 
-Bachelorarbeit an der FH Burgenland, Studiengang Angewandte Elektronik und Photonik.  
+Bachelorarbeit an der Hochschule Burgenland, Studiengang Angewandte Elektronik und Photonik.  
 Hardware-Plattform: Keyestudio ESP32 Smart Farm Kit + zweiter ESP32 als Logic-Controller.  
 Forschungsfrage: Modulare Implementierung eingebetteter Steuerungs- und Regelungsalgorithmen
 sowie Eignung von KI-gestützter Entwicklung (Vibe Coding) für eingebettete Systeme.
@@ -18,7 +18,7 @@ sowie Eignung von KI-gestützter Entwicklung (Vibe Coding) für eingebettete Sys
 │                             │         │                             │
 │  - Alle Sensoren lesen      │         │  - Zustandsmaschinen        │
 │  - Alle Aktoren ansteuern   │         │  - Klimasteuerung           │
-│  - Keine Regelungslogik     │         │  - Safety-Monitoring        │
+│  - Keine Regelungslogik     │         │  - Sicherheitsüberwachung   │
 │  - Sensordaten senden       │         │  - Alarmlogik               │
 │  - Befehle empfangen        │         │  - Profilbasierte Steuerung │
 └─────────────────────────────┘         └─────────────────────────────┘
@@ -82,8 +82,8 @@ UART2 Verkabelung (physisch festgelegt):
 - Dateinamen: `snake_case`
 - Funktionen: `snake_case` mit Modul-Präfix (z. B. `control_task_init()`)
 
-### Safety-Regeln (verbindlich überall)
-- **Water Pump:** max. 30 s kontinuierlich ON, danach min. 5 s Pause (im `actuator_task` erzwingen)
+### Sicherheitsregeln (verbindlich überall)
+- **Wasserpumpe:** max. 30 s kontinuierlich eingeschaltet, danach min. 5 s Pause (im `actuator_task` erzwingen)
 - **Alle Sensoren:** Plausibilitätsprüfung; bei ungültigem Wert Fehlerflag setzen
 - **UART Timeout:** kein Frame in 500 ms → esp_hardware in FAILSAFE (alle Aktoren aus)
 - **Watchdog Timer** auf beiden ESP32s aktiv (TWDT, Timeout 5000 ms)
@@ -100,7 +100,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 
 ---
 
-### UC1.1 – Shared Protocol Types
+### UC1.1 – Gemeinsame Protokolldefinitionen
 
 **Was:** Gemeinsame Header-Dateien mit allen Protokoll-Definitionen (identisch auf beiden ESP32s).
 
@@ -110,7 +110,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
    1 B      1 B        1 B           0–32 B                  1 B
 ```
 
-**Message Types:**
+**Nachrichtentypen:**
 | Konstante          | Wert   | Richtung                        |
 |--------------------|--------|---------------------------------|
 | `MSG_SENSOR_DATA`  | `0x01` | esp_hardware → esp_logic        |
@@ -120,7 +120,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 
 **Checksumme:** CRC-8, Polynom `0x07`, Startwert `0x00`, berechnet über `MSG_TYPE`, `PAYLOAD_LEN` und alle Payload-Bytes. `START_BYTE` (`0xAA`) ist nicht Teil der Checksumme.
 
-**Sensor Data Payload – `sensor_data_t`** (13 Bytes, `__attribute__((packed))`):
+**Sensorwerte-Payload – `sensor_data_t`** (13 Bytes, `__attribute__((packed))`):
 
 | Feld             | Typ        | Größe  | Einheit / Kodierung                    | Pin      |
 |------------------|------------|--------|----------------------------------------|----------|
@@ -145,7 +145,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 | 6   | —      | —                         | Reserviert                    |
 | 7   | `0x80` | `ERROR_FLAG_UART_TIMEOUT` | UART Kommunikations-Timeout   |
 
-**Actuator Command Payload – `actuator_cmd_t`** (7 Bytes):
+**Aktorbefehle-Payload – `actuator_cmd_t`** (7 Bytes):
 
 | Feld             | Typ       | Größe | Beschreibung                              | Pin     |
 |------------------|-----------|-------|-------------------------------------------|---------|
@@ -157,7 +157,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 | `display_mode`   | `uint8_t` | 1 B   | 0 = OK, 1 = REFILL                        | I2C     |
 | `profile`        | `uint8_t` | 1 B   | 0 = ECO, 1 = NORMAL, 2 = PERFORMANCE      | —       |
 
-**Dateien:** `protocol.h` (in beiden Projekten identisch, mit Compile-Time-Assertions)
+**Dateien:** `protocol.h` (in beiden Projekten identisch, mit Kompilierzeit-Assertions)
 
 ---
 
@@ -181,7 +181,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 **`actuator_task`:**
 - GPIO-Outputs und PWM (LEDC-Treiber) initialisieren
 - Servo io26 und Fan io18/io19 per PWM ansteuern
-- Pump Safety: max 30 s ON, min 5 s Pause – unabhängig vom Befehl
+- Pumpen-Sicherheitsregel: max 30 s eingeschaltet, min 5 s Pause – unabhängig vom Befehl
 - Befehle aus FreeRTOS-Queue lesen und ausführen
 
 **`comm_task`:**
@@ -192,7 +192,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 
 **`watchdog_task`:**
 - ESP-IDF Task Watchdog Timer (TWDT, Timeout 5000 ms) initialisieren
-- Alle Tasks subscriben, Stack High Water Mark alle 10 s loggen
+- Alle Tasks subscriben, Stack-Auslastungsmaximum alle 10 s loggen
 
 ---
 
@@ -215,7 +215,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 - Heartbeat-Timeout überwachen (500 ms)
 
 **`control_task`:**
-- Sensor-Daten lesen (via Mutex geschütztes Shared-Struct)
+- Sensor-Daten lesen (via Mutex geschützte gemeinsame Datenstruktur)
 - Zustandsmaschinen ausführen (UC2, UC3)
 - Steuerbefehle als `actuator_cmd_t` in Queue schreiben
 
@@ -231,7 +231,7 @@ UC1 bildet die Basis für alle weiteren Use Cases.
 
 **`monitor_task`:**
 - Sensor-Daten auf Aktualität prüfen (älter als 600 ms → Warnung)
-- Safety-Checks ausführen und Fehlerzustände melden
+- Sicherheitsprüfungen ausführen und Fehlerzustände melden
 
 ---
 
