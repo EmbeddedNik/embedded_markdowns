@@ -91,286 +91,201 @@ UART2 Verkabelung (physisch festgelegt):
 
 ---
 
-## UC1 – Kommunikationsschicht & Systemgrundstruktur
+## UC1 - Kommunikationsschicht & Systemgrundstruktur
 
 ### Ziel
-Aufbau der gesamten Software-Infrastruktur für beide ESP32s:
-FreeRTOS Task-Struktur, UART2-Kommunikationsprotokoll, gemeinsame Datenstrukturen.
-UC1 bildet die Basis für alle weiteren Use Cases.
+UC1 legt die gemeinsame technische Basis fuer beide ESP32s. Das System wird in zwei klar getrennte Rollen aufgeteilt: esp_hardware liest Sensoren und steuert Aktoren, esp_logic verarbeitet die Sensordaten und trifft Steuerentscheidungen.
 
 ---
 
-### UC1.1 – Gemeinsame Protokolldefinitionen
+### UC1.1 - Kommunikation zwischen esp_hardware und esp_logic
 
-**Was:** Gemeinsame Header-Dateien mit allen Protokoll-Definitionen (identisch auf beiden ESP32s).
-
-**Protokoll-Frame:**
-```
-[ 0xAA | MSG_TYPE | PAYLOAD_LEN | PAYLOAD (max 32 Bytes) | CRC-8 ]
-   1 B      1 B        1 B           0–32 B                  1 B
-```
-
-**Nachrichtentypen:**
-| Konstante          | Wert   | Richtung                        |
-|--------------------|--------|---------------------------------|
-| `MSG_SENSOR_DATA`  | `0x01` | esp_hardware → esp_logic        |
-| `MSG_ACTUATOR_CMD` | `0x02` | esp_logic → esp_hardware        |
-| `MSG_HEARTBEAT`    | `0x03` | esp_hardware → esp_logic (leer) |
-| `MSG_ACK`          | `0x04` | beide Richtungen (leer)         |
-
-**Checksumme:** CRC-8, Polynom `0x07`, Startwert `0x00`, berechnet über `MSG_TYPE`, `PAYLOAD_LEN` und alle Payload-Bytes. `START_BYTE` (`0xAA`) ist nicht Teil der Checksumme.
-
-**Sensorwerte-Payload – `sensor_data_t`** (13 Bytes, `__attribute__((packed))`):
-
-| Feld             | Typ        | Größe  | Einheit / Kodierung                    | Pin      |
-|------------------|------------|--------|----------------------------------------|----------|
-| `water_level`    | `uint16_t` | 2 B    | ADC-Rohwert 0–4095                     | io33     |
-| `photoresistor`  | `uint16_t` | 2 B    | ADC-Rohwert 0–4095                     | io34     |
-| `temperature`    | `int16_t`  | 2 B    | °C × 10 (z. B. 235 = 23,5 °C)         | io17     |
-| `humidity`       | `uint16_t` | 2 B    | % × 10 (z. B. 654 = 65,4 %)           | io17     |
-| `ultrasonic_mm`  | `uint16_t` | 2 B    | Distanz in mm, 0–4000                  | io12/13  |
-| `pir_detected`   | `uint8_t`  | 1 B    | 0 = keine Bewegung, 1 = Bewegung       | io23     |
-| `button_pressed` | `uint8_t`  | 1 B    | 0 = nicht gedrückt, 1 = gedrückt      | io5      |
-| `error_flags`    | `uint8_t`  | 1 B    | Bitmask, siehe Tabelle unten           | —        |
-
-**`error_flags` Bitmask:**
-| Bit | Maske  | Konstante                 | Bedeutung                     |
-|-----|--------|---------------------------|-------------------------------|
-| 0   | `0x01` | `ERROR_FLAG_LDR`          | Photoresistor ADC-Fehler      |
-| 1   | `0x02` | `ERROR_FLAG_WATER_LEVEL`  | Wasserstand ADC-Fehler        |
-| 2   | —      | —                         | Reserviert                    |
-| 3   | `0x08` | `ERROR_FLAG_DISTANCE`     | Ultraschall-Timeout           |
-| 4   | `0x10` | `ERROR_FLAG_TEMPERATURE`  | DHT Temperatur-Fehler         |
-| 5   | `0x20` | `ERROR_FLAG_HUMIDITY`     | DHT Luftfeuchte-Fehler        |
-| 6   | —      | —                         | Reserviert                    |
-| 7   | `0x80` | `ERROR_FLAG_UART_TIMEOUT` | UART Kommunikations-Timeout   |
-
-**Aktorbefehle-Payload – `actuator_cmd_t`** (7 Bytes):
-
-| Feld             | Typ       | Größe | Beschreibung                              | Pin     |
-|------------------|-----------|-------|-------------------------------------------|---------|
-| `pump_on`        | `uint8_t` | 1 B   | 0 = aus, 1 = an                           | io25    |
-| `fan_speed`      | `uint8_t` | 1 B   | 0 = aus, >0 = an (PWM-Wert)               | io19    |
-| `servo_position` | `uint8_t` | 1 B   | 0 = geschlossen, 100 = offen              | io26    |
-| `led_on`         | `uint8_t` | 1 B   | 0 = aus, 1 = an                           | io27    |
-| `buzzer_on`      | `uint8_t` | 1 B   | 0 = aus, 1 = an                           | io16    |
-| `display_mode`   | `uint8_t` | 1 B   | 0 = OK, 1 = REFILL                        | I2C     |
-| `profile`        | `uint8_t` | 1 B   | 0 = ECO, 1 = NORMAL, 2 = PERFORMANCE      | —       |
-
-**Dateien:** `protocol.h` (in beiden Projekten identisch, mit Kompilierzeit-Assertions)
-
----
-
-### UC1.2 – FreeRTOS Grundstruktur esp_hardware
-
-**Tasks:**
-| Task           | Priorität | Periode  | Stack |
-|----------------|-----------|----------|-------|
-| sensor_task    | 3         | 10 ms    | 4096  |
-| actuator_task  | 3         | 10 ms    | 4096  |
-| comm_task      | 4         | 5 ms     | 4096  |
-| watchdog_task  | 5         | 1000 ms  | 2048  |
-
-**`sensor_task`:**
-- Liest alle Sensoren zyklisch via ESP-IDF ADC/GPIO-Treiber
-- DHT-Protokoll für Temperatur/Luftfeuchtigkeit auf io17
-- Ultraschall: Trigger io12, Echo io13, Distanz per `esp_timer_get_time()`
-- Plausibilitätsprüfung auf alle Werte; Fehlerflag bei ungültigem Wert
-- Debug-Ausgabe via `ESP_LOGI` alle 500 ms
-
-**`actuator_task`:**
-- GPIO-Outputs und PWM (LEDC-Treiber) initialisieren
-- Servo io26 und Fan io18/io19 per PWM ansteuern
-- Pumpen-Sicherheitsregel: max 30 s eingeschaltet, min 5 s Pause – unabhängig vom Befehl
-- Befehle aus FreeRTOS-Queue lesen und ausführen
-
-**`comm_task`:**
-- UART2 initialisieren (TX=io2, RX=io4, 115200 Baud, 8N1)
-- Sensordaten alle 100 ms als `MSG_SENSOR_DATA` senden
-- Eingehende `MSG_ACTUATOR_CMD` empfangen und in Queue schreiben
-- Timeout-Erkennung: kein Befehl in 500 ms → FAILSAFE (alle Aktoren aus)
-
-**`watchdog_task`:**
-- ESP-IDF Task Watchdog Timer (TWDT, Timeout 5000 ms) initialisieren
-- Alle Tasks subscriben, Stack-Auslastungsmaximum alle 10 s loggen
-
----
-
-### UC1.3 – FreeRTOS Grundstruktur esp_logic
-
-**Tasks:**
-| Task           | Priorität | Periode  | Stack |
-|----------------|-----------|----------|-------|
-| control_task   | 4         | 10 ms    | 4096  |
-| comm_task      | 5         | 10 ms    | 4096  |
-| serial_task    | 3         | 20 ms    | 3072  |
-| display_task   | 2         | 100 ms   | 4096  |
-| monitor_task   | 4         | 10 ms    | 3072  |
-| watchdog_task  | 6         | 1000 ms  | 2048  |
-
-**`comm_task`:**
-- UART2 initialisieren (TX=io33, RX=io32, 115200 Baud, 8N1)
-- Eingehende `MSG_SENSOR_DATA` empfangen → `sensor_data_t` befüllen
-- Ausgehende `MSG_ACTUATOR_CMD` aus Queue senden
-- Heartbeat-Timeout überwachen (500 ms)
-
-**`control_task`:**
-- Sensor-Daten lesen (via Mutex geschützte gemeinsame Datenstruktur)
-- Zustandsmaschinen ausführen (UC2, UC3)
-- Steuerbefehle als `actuator_cmd_t` in Queue schreiben
-
-**`serial_task`:**
-- USB/UART0-Eingabe des Betreibers
-- Profilwechsel (ECO/NORMAL/PERFORMANCE) via Tastatureingabe
-- Schreibt aktives Profil in globale Variable `g_active_profile`
-
-**`display_task`:**
-- LCD 1602 via I2C (SDA=io21, SCL=io22 am esp_hardware)
-- Anzeige von Systemzustand, Messwerten und Warnungen
-- Empfängt `display_mode` aus `actuator_cmd_t` (0=OK, 1=REFILL)
-
-**`monitor_task`:**
-- Sensor-Daten auf Aktualität prüfen (älter als 600 ms → Warnung)
-- Sicherheitsprüfungen ausführen und Fehlerzustände melden
-
----
-
-## UC2 – Wasserstandsüberwachung & Profilbasierte Systemsteuerung
-
-### Ziel
-Kontinuierliche Überwachung des Wasserstands mit automatischer Zustandserkennung und
-Alarmierung bei niedrigem Füllstand. Parallel dazu ermöglicht ein dreistufiges Profilsystem
-(ECO / NORMAL / PERFORMANCE) eine adaptierbare Steuerung der Aktoren je nach Betriebsanforderung.
-Beide Mechanismen laufen im `control_task` auf dem esp_logic.
-
----
-
-### UC2.1 – Wasserstand-Zustandsmaschine
-
-Der Wasserstand wird kontinuierlich per ADC ausgewertet. Unterschreitet der Füllstand einen
-definierten Schwellwert, wechselt das System in den REFILL-Zustand und alarmiert den Betreiber.
-Eine Hysterese verhindert Flattern an der Zustandsgrenze.
-
-**Zustandsdiagramm:**
-```
-              level ≤ WATER_REFILL_ENTER (1100 ADC)
-WATER_OK ────────────────────────────────────────► WATER_REFILL
-  ▲                                                      │
-  └──────── level > WATER_REFILL_EXIT (1110 ADC) ────────┘
-```
-
-**Zustände:**
-
-| Zustand            | Bedingung               | Pumpe     | Display  | Buzzer       |
-|--------------------|-------------------------|-----------|----------|--------------|
-| `WATER_STATE_OK`   | Füllstand > 1110 ADC    | steuerbar | OK       | aus          |
-| `WATER_STATE_REFILL` | Füllstand ≤ 1100 ADC  | gesperrt  | REFILL   | Alarmton     |
-
-**Schwellwerte und Hysterese:**
-| Konstante            | Wert | Bedeutung                           |
-|----------------------|------|-------------------------------------|
-| `WATER_REFILL_ENTER` | 1100 | OK → REFILL wenn `level ≤ 1100`     |
-| `WATER_REFILL_EXIT`  | 1110 | REFILL → OK wenn `level > 1110`     |
+Die beiden ESP32s kommunizieren ueber UART2. Die Verbindung muss Sensordaten, Fehlerzustaende und Aktorbefehle zuverlaessig uebertragen und fehlerhafte Nachrichten erkennen.
 
 **Anforderungen:**
-- Zustandswechsel nur per Hysterese (kein Flattern bei Grenzwerten)
-- Jeder Zustandswechsel wird via `ESP_LOGI` geloggt
-- Aktueller Zustand auf LCD angezeigt
+- esp_hardware sendet zyklisch Sensordaten an esp_logic
+- esp_logic sendet Aktorbefehle an esp_hardware
+- Nachrichten enthalten eine einfache Fehlererkennung
+- ungueltige oder unvollstaendige Nachrichten duerfen keine ungueltigen Aktorbefehle ausloesen
+- bei Kommunikationsausfall muss esp_hardware einen sicheren Zustand einnehmen
+
+**Uebertragene Informationen:**
+| Richtung | Inhalt |
+|----------|--------|
+| esp_hardware -> esp_logic | Wasserstand, Helligkeit, Temperatur, Luftfeuchte, Distanz, PIR, Button, Fehlerstatus |
+| esp_logic -> esp_hardware | Pumpe, Luefter, Servo, LED, Buzzer, Displaystatus, aktives Profil |
 
 ---
 
-### UC2.2 – Profilbasierte Aktorsteuerung
+### UC1.2 - Grundstruktur esp_hardware
 
-Der Betreiber kann via serielle Konsole (USB/UART0) zwischen drei Systemprofilen umschalten,
-die den Ressourceneinsatz – insbesondere die Lüfteraktivität – an den jeweiligen Betriebsbedarf
-anpassen. Das Profil wird bei jedem Steuerzyklus als `actuator_cmd_t.profile` an den
-esp_hardware übertragen.
-
-**Profile und Lüfter-Temperaturschwellen:**
-| Profil        | `profile`-Wert | Lüfter LOW ab | Lüfter HIGH ab | Einsatzszenario               |
-|---------------|----------------|---------------|----------------|-------------------------------|
-| `ECO`         | 0              | 28,0 °C       | 32,0 °C        | Energiesparbetrieb            |
-| `NORMAL`      | 1              | 25,0 °C       | 28,0 °C        | Standardbetrieb               |
-| `PERFORMANCE` | 2              | 23,0 °C       | 26,0 °C        | Maximale Klimatisierung       |
-
-Das aktive Profil wird in der globalen Variable `g_active_profile` (`system_profile_t`) gehalten.
-
----
-
-## UC3 – Klimasteuerung & Alarmanlage
-
-### Ziel
-Automatische Klimasteuerung basierend auf Temperatur und Lichtverhältnissen.
-Zusätzlich eine sensorgestützte Alarmanlage, die bei Bewegungserkennung im Dunkeln auslöst.
-Alle Steuerungen laufen als unabhängige Zustandsmaschinen im `control_task`.
-
----
-
-### UC3.1 – Klimasteuerung
-
-**Lüftersteuerung (profilabhängig):**
-
-Die Temperaturschwellen werden durch das aktive Systemprofil (UC2.2) bestimmt:
-
-| Bedingung                                        | Lüfterzustand |
-|--------------------------------------------------|---------------|
-| Temperatur ≥ `fan_high_d10` (profilabhängig)     | HIGH          |
-| `fan_low_d10` ≤ Temperatur < `fan_high_d10`      | LOW           |
-| Temperatur < `fan_low_d10` (profilabhängig)      | OFF           |
-
-**Licht- & Servosteuerung (LDR-basiert):**
-
-Der Helligkeitssensor steuert den Tag/Nacht-Zustand des Systems. Ein Kandidatenstatus muss
-mindestens 1000 ms stabil anliegen, bevor der Übergang ausgeführt wird (Entprellzeit).
-
-```
-              LDR ≤ 1100 ADC für 1000 ms
-LIGHT_DAY ─────────────────────────────► LIGHT_NIGHT
-  ▲                                           │
-  └───── LDR > 1300 ADC für 1000 ms ─────────┘
-```
-
-| Zustand            | Servo-Position  | Anmerkung                     |
-|--------------------|-----------------|-------------------------------|
-| `LIGHT_STATE_DAY`  | 0 (geschlossen) | Normalbetrieb                 |
-| `LIGHT_STATE_NIGHT`| 100 (offen)     | Nachtmodus, Alarm aktiv       |
-
-**Button (io5):**
-- Kurz drücken (< 1 s): Display-Modus wechseln (zeigt verschiedene Sensorwerte)
-
----
-
-### UC3.2 – Nacht-Alarmanlage
-
-Der PIR-Sensor (io23) löst einen Alarm aus, wenn das System im Nacht-Zustand
-(`LIGHT_STATE_NIGHT`) eine Bewegung erkennt. Eine Schutzzeit nach dem Nacht-Übergang
-verhindert Fehlalarme durch die Servobewegung.
-
-**Auslösebedingungen:**
-- Systemzustand: `LIGHT_STATE_NIGHT`
-- Schutzzeit abgelaufen: ≥ 5000 ms nach letztem NIGHT-Übergang
-- PIR-Sensor (io23): Bewegung erkannt
-
-**Alarmverhalten:**
-| Aktor   | Verhalten                              |
-|---------|----------------------------------------|
-| Buzzer  | Dauerton                               |
-| LED     | schnelles Blinken                      |
-| Display | Alarmstatus                            |
-
-**Zeitkonstanten:**
-| Konstante              | Wert     | Bedeutung                                     |
-|------------------------|----------|-----------------------------------------------|
-| `LDR_NIGHT_ENTER_ADC`  | 1100     | LDR-Schwellwert für Nacht-Erkennung           |
-| `LDR_DAY_ENTER_ADC`    | 1300     | LDR-Schwellwert für Tag-Erkennung             |
-| `LDR_CONFIRM_MS`       | 1000 ms  | Kandidatenstatus muss 1 s stabil sein         |
-| `NIGHT_ALARM_GUARD_MS` | 5000 ms  | Sperrzeit nach NIGHT-Transition               |
-| `NIGHT_ALARM_HOLD_MS`  | 5000 ms  | Alarm bleibt min. 5 s aktiv nach Auslösung   |
+esp_hardware uebernimmt die hardwarenahe Ebene des Systems. Dort werden Sensorwerte erfasst, Aktoren angesteuert und Sicherheitsgrenzen fuer physische Ausgaenge eingehalten.
 
 **Anforderungen:**
-- Klimasteuerung und Alarmanlage laufen als unabhängige Zustandsmaschinen
-- Jeder Zustandswechsel wird via `ESP_LOGI` geloggt
-- Hysterese und Bestätigungszeiten bei allen Schwellwerten
+- zyklisches Einlesen aller Sensoren des Smart-Farm-Kits
+- Plausibilitaetspruefung der Messwerte und Setzen von Fehlerflags
+- Ausfuehren der von esp_logic empfangenen Aktorbefehle
+- Erzwingen lokaler Sicherheitsregeln, insbesondere fuer die Wasserpumpe
+- sicherer Zustand bei ausbleibenden Befehlen von esp_logic
+- Watchdog-Ueberwachung fuer die laufenden Tasks
+
+---
+
+### UC1.3 - Grundstruktur esp_logic
+
+esp_logic uebernimmt die zentrale Logik- und Steuerungsebene. Dort werden Sensordaten bewertet, Zustaende berechnet und Aktorbefehle fuer esp_hardware erzeugt.
+
+**Anforderungen:**
+- Empfang und Zwischenspeicherung aktueller Sensordaten
+- zyklische Ausfuehrung der Steuerungs- und Zustandslogik
+- Erzeugung konsistenter Aktorbefehle fuer esp_hardware
+- Bedienmoeglichkeit fuer das aktive Systemprofil
+- Ueberwachung der Datenaktualitaet und sicherheitsrelevanter Zustaende
+- Watchdog-Ueberwachung fuer die laufenden Tasks
+
+---
+
+## UC2 - Wasserstandsueberwachung & profilbasierte Systemsteuerung
+
+### Ziel
+UC2 ueberwacht den Wasserstand und stellt ein dreistufiges Profilmodell bereit. Das System soll dem Betreiber einen niedrigen Fuellstand anzeigen und die Lueftersteuerung an unterschiedliche Betriebsanforderungen anpassen koennen.
+
+---
+
+### UC2.1 - Wasserstandszustand
+
+Der Wasserstand wird kontinuierlich bewertet. Bei zu niedrigem Fuellstand wechselt das System in einen REFILL-Zustand, bis wieder ausreichend Wasser erkannt wird. Eine Hysterese verhindert haeufiges Umschalten an der Grenze.
+
+**Zustaende:**
+| Zustand | Bedeutung |
+|---------|-----------|
+| OK | Wasserstand ausreichend |
+| REFILL | Wasserstand zu niedrig, Nachfuellen erforderlich |
+
+**Anforderungen:**
+- niedriger Wasserstand muss erkannt und angezeigt werden
+- Zustandswechsel muessen gegen Messwertflattern abgesichert sein
+- der aktuelle Wasserzustand muss an esp_hardware uebertragen und am Display/Webinterface darstellbar sein
+- Sensorfehler duerfen nicht still ignoriert werden
+
+---
+
+### UC2.2 - Systemprofile
+
+Das System unterstuetzt drei Profile fuer unterschiedliche Betriebsarten. Das aktive Profil beeinflusst insbesondere die Lueftersteuerung und kann durch den Betreiber geaendert werden.
+
+**Profile:**
+| Profil | Bedeutung |
+|--------|-----------|
+| ECO | energiesparender Betrieb |
+| NORMAL | Standardbetrieb |
+| PERFORMANCE | staerkere Klimatisierung |
+
+**Anforderungen:**
+- Profilwechsel zwischen ECO, NORMAL und PERFORMANCE
+- Profil bleibt zentrale Eingangsvariable fuer die Lueftersteuerung
+- aktives Profil wird an esp_hardware uebertragen und angezeigt
+- Profilwechsel muss ohne Neustart des Systems moeglich sein
+
+---
+
+## UC3 - Klimasteuerung & Alarmanlage
+
+### Ziel
+UC3 automatisiert einfache Klima- und Sicherheitsfunktionen. Temperatur und Helligkeit beeinflussen Luefter, LED und Servo. Der PIR-Sensor dient zur Bewegungserkennung im Nachtbetrieb.
+
+---
+
+### UC3.1 - Klimasteuerung
+
+Die Klimasteuerung nutzt Temperatur, Helligkeit und das aktive Profil, um Luefter und Tag/Nacht-Verhalten zu bestimmen.
+
+**Anforderungen:**
+- Luefter reagiert temperaturabhaengig und profilabhaengig
+- Helligkeit bestimmt den Tag/Nacht-Zustand
+- der Servo folgt dem Tag/Nacht-Zustand der Anlage
+- Schwellwerte muessen mit Hysterese oder Bestaetigungszeit gegen Flattern abgesichert sein
+- Sensorfehler fuehren zu einem sicheren Verhalten der betroffenen Aktoren
+
+---
+
+### UC3.2 - Nacht-Alarmanlage
+
+Im Nachtbetrieb soll das System Bewegungen erkennen und den Betreiber akustisch/optisch warnen. Fehlalarme durch den Uebergang in den Nachtzustand sollen vermieden werden.
+
+**Anforderungen:**
+- PIR-Bewegung im Nachtzustand loest Alarm aus
+- nach dem Wechsel in den Nachtzustand gilt eine kurze Schutzzeit
+- Alarm wird ueber Buzzer und LED signalisiert
+- Alarmzustand wird in der Systemanzeige beruecksichtigt
+- Alarm- und Klimafunktionen duerfen die UART-Kommunikation nicht blockieren
+
+---
+
+## UC4 - IoT-Webinterface & lokale WLAN-Bedienung
+
+### Ziel
+Der esp_logic stellt ein lokales WLAN bereit, ueber das sich ein Betreiber direkt mit dem
+Smart-Farm-System verbinden kann. Ueber ein Webinterface koennen aktuelle Sensorwerte und
+Systemzustaende eingesehen sowie das aktive Luefterprofil geaendert werden. Die bestehende
+FreeRTOS- und UART2-Kommunikationsstruktur bleibt dabei erhalten.
+
+---
+
+### UC4.1 - Lokales WLAN und HTTP-Server
+
+Der esp_logic arbeitet als WLAN Access Point. Ein Bediengeraet kann sich direkt mit diesem
+Netzwerk verbinden und die Weboberflaeche ueber die lokale IP-Adresse des ESP32 aufrufen.
+
+**Anforderungen:**
+- esp_logic erzeugt ein eigenes WLAN fuer den lokalen Zugriff
+- HTTP-Server laeuft als eigene FreeRTOS-Task
+- Bestehende Tasks fuer Kommunikation, Steuerung und Sicherheit duerfen nicht blockiert werden
+- Bei WLAN- oder HTTP-Fehlern muss das restliche System weiterlaufen
+
+---
+
+### UC4.2 - Anzeige aktueller Messwerte
+
+Das Webinterface zeigt die vom esp_hardware empfangenen Sensordaten an. Die Daten stammen aus
+der bestehenden UART2-Kommunikation und werden im esp_logic nur visualisiert.
+
+**Anzuzeigende Werte:**
+| Wert            | Quelle                         |
+|-----------------|--------------------------------|
+| Temperatur      | `sensor_data_t.temperature`    |
+| Luftfeuchte     | `sensor_data_t.humidity`       |
+| Wasserstand     | `sensor_data_t.water_level`    |
+| Helligkeit/LDR  | `sensor_data_t.photoresistor`  |
+| PIR-Zustand     | `sensor_data_t.pir_detected`   |
+
+---
+
+### UC4.3 - Anzeige von Systemzustaenden
+
+Neben den Messwerten zeigt das Webinterface wichtige Systemzustaende an, damit der Betreiber den
+aktuellen Anlagenzustand ohne serielle Konsole beurteilen kann.
+
+**Anzuzeigende Zustaende:**
+| Zustand             | Bedeutung                          |
+|---------------------|------------------------------------|
+| Wasserzustand       | OK / REFILL                        |
+| Aktives Profil      | ECO / NORMAL / PERFORMANCE         |
+| Datenstatus         | gueltige oder fehlende Sensordaten |
+
+---
+
+### UC4.4 - Profilumschaltung ueber Webinterface
+
+Das aktive Systemprofil kann ueber das Webinterface geaendert werden. Die Umschaltung wirkt auf
+dieselbe globale Profilvariable wie die serielle Bedienung und beeinflusst damit die bestehende
+profilabhaengige Lueftersteuerung aus UC2/UC3.
+
+**Anforderungen:**
+- Auswahl zwischen ECO, NORMAL und PERFORMANCE
+- Profilwechsel wird im esp_logic uebernommen und zyklisch an esp_hardware uebertragen
+- Serielle Profilumschaltung bleibt weiterhin moeglich
+- Ungueltige Web-Anfragen duerfen keinen undefinierten Zustand erzeugen
 
 ---
 
@@ -488,5 +403,9 @@ UC2.1 → Wasserstand-Zustandsmaschine
 UC2.2 → Profilbasierte Aktorsteuerung (serial_task, g_active_profile)
 UC3.1 → Klimasteuerung (Lüfter profilabhängig, LDR, Servo)
 UC3.2 → Nacht-Alarmanlage (PIR, Buzzer, LED)
+UC4.1 -> Lokales WLAN und HTTP-Server auf esp_logic
+UC4.2 -> Anzeige aktueller Sensordaten im Webinterface
+UC4.3 -> Anzeige zentraler Systemzustaende im Webinterface
+UC4.4 -> Profilumschaltung ueber Webinterface
 Tests → Unity Unit-Tests für protocol und control_logic (pio test -e native)
 ```
