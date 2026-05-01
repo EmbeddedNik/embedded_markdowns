@@ -38,6 +38,10 @@
 #define WATCHDOG_TASK_PRIORITY      6
 #define WATCHDOG_TASK_PERIOD_MS     1000
 
+/* wifi_task */
+#define WIFI_TASK_STACK_SIZE        8192
+#define WIFI_TASK_PRIORITY          2
+
 #define TWDT_TIMEOUT_MS             5000
 #define SENSOR_STALE_MS             600
 #define HWM_LOG_INTERVAL_CYCLES     10

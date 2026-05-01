@@ -24,6 +24,7 @@
 
 static const char *TAG = "actuator_task";
 static bool s_lcd_available = false;
+static bool s_servo_channel_attached = false;
 
 static inline int pump_gpio_level(bool on)
 {
@@ -53,6 +54,24 @@ static void ledc_init_servo(void)
     };
     ledc_timer_config(&timer);
 
+    gpio_config_t cfg = {
+        .pin_bit_mask = (1ULL << ACTUATOR_PIN_SERVO),
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+    gpio_set_level(ACTUATOR_PIN_SERVO, 0);
+    s_servo_channel_attached = false;
+}
+
+static void servo_attach_pwm(void)
+{
+    if (s_servo_channel_attached) {
+        return;
+    }
+
     ledc_channel_config_t ch = {
         .gpio_num   = ACTUATOR_PIN_SERVO,
         .speed_mode = LEDC_LOW_SPEED_MODE,
@@ -62,6 +81,7 @@ static void ledc_init_servo(void)
         .hpoint     = 0,
     };
     ledc_channel_config(&ch);
+    s_servo_channel_attached = true;
 }
 
 static void ledc_init_buzzer(void)
@@ -134,6 +154,8 @@ static void gpio_outputs_init(void)
 /* ── Apply servo angle ──────────────────────────────────────────── */
 static void servo_set_angle(uint16_t angle_deg)
 {
+    servo_attach_pwm();
+
     if (angle_deg > 180) angle_deg = 180;
     uint32_t duty = SERVO_DUTY_0DEG +
                     ((uint32_t)(SERVO_DUTY_180DEG - SERVO_DUTY_0DEG) * angle_deg) / 180;
@@ -147,8 +169,13 @@ static void servo_disable(void)
     /* Use set_duty(0)+update instead of ledc_stop() — ledc_stop() hands the
      * pin back to GPIO-idle and ledc_update_duty() won't re-enable it without
      * a full channel re-config on some ESP-IDF versions. */
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_SERVO, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_SERVO);
+    if (s_servo_channel_attached) {
+        ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_SERVO, 0);
+        s_servo_channel_attached = false;
+    }
+    gpio_set_direction(ACTUATOR_PIN_SERVO, GPIO_MODE_OUTPUT);
+    gpio_set_pull_mode(ACTUATOR_PIN_SERVO, GPIO_PULLDOWN_ONLY);
+    gpio_set_level(ACTUATOR_PIN_SERVO, 0);
 }
 
 /* ── Apply fan speed ─────────────────────────────────────────────── */

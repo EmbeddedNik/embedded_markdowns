@@ -1,7 +1,7 @@
 /*
  * @file    main.c
  * @brief   Entry point for esp_logic (Master ESP32 – Logic & Control).
- *          Initialises all subsystems and creates the five FreeRTOS tasks.
+ *          Initialises all subsystems and creates the FreeRTOS tasks.
  * @author  Claude Code (AI) / Niklas Grill
  * @date    2026-04-29
  */
@@ -16,6 +16,7 @@
 #include "display_task.h"
 #include "monitor_task.h"
 #include "serial_task.h"
+#include "wifi_task.h"
 #include "watchdog_task.h"
 
 static const char *TAG = "main";
@@ -26,6 +27,7 @@ TaskHandle_t g_comm_task_handle     = NULL;
 TaskHandle_t g_display_task_handle  = NULL;
 TaskHandle_t g_monitor_task_handle  = NULL;
 TaskHandle_t g_serial_task_handle   = NULL;
+TaskHandle_t g_wifi_task_handle     = NULL;
 TaskHandle_t g_watchdog_task_handle = NULL;
 
 void app_main(void)
@@ -39,6 +41,7 @@ void app_main(void)
     display_task_init();
     monitor_task_init();
     serial_task_init();
+    wifi_task_init();
 
     xTaskCreate(control_task,  "control_task",  CONTROL_TASK_STACK_SIZE,
                 NULL, CONTROL_TASK_PRIORITY,  &g_control_task_handle);
@@ -55,6 +58,9 @@ void app_main(void)
     xTaskCreate(serial_task,   "serial_task",   SERIAL_TASK_STACK_SIZE,
                 NULL, SERIAL_TASK_PRIORITY,   &g_serial_task_handle);
 
+    xTaskCreate(wifi_task,     "wifi_task",     WIFI_TASK_STACK_SIZE,
+                NULL, WIFI_TASK_PRIORITY,     &g_wifi_task_handle);
+
     xTaskCreate(watchdog_task, "watchdog_task", WATCHDOG_TASK_STACK_SIZE,
                 NULL, WATCHDOG_TASK_PRIORITY, &g_watchdog_task_handle);
 
@@ -63,6 +69,7 @@ void app_main(void)
     configASSERT(g_display_task_handle  != NULL);
     configASSERT(g_monitor_task_handle  != NULL);
     configASSERT(g_serial_task_handle   != NULL);
+    configASSERT(g_wifi_task_handle     != NULL);
     configASSERT(g_watchdog_task_handle != NULL);
 
 }

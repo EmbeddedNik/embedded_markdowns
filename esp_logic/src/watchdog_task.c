@@ -54,6 +54,8 @@ void watchdog_task(void *arg)
             if (hwm < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: monitor_task");
             hwm = uxTaskGetStackHighWaterMark(g_serial_task_handle);
             if (hwm < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: serial_task");
+            hwm = uxTaskGetStackHighWaterMark(g_wifi_task_handle);
+            if (hwm < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: wifi_task");
             hwm = uxTaskGetStackHighWaterMark(NULL);
             if (hwm < TASK_MIN_STACK_HWM) ESP_LOGW(TAG, "LOW stack: watchdog_task");
         }
