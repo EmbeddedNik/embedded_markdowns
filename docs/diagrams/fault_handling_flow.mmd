@@ -1,13 +1,14 @@
 flowchart TD
-    A["Runtime fault source"] --> B{"Fault type"}
-    B -->|invalid sensor value| S["Set sensor error flag<br/>use safe/last valid value"]
-    B -->|missing actuator commands| F["esp_hardware failsafe<br/>actuators off"]
-    B -->|stale sensor data| L["esp_logic safe command<br/>fan/pump/alarm off"]
-    B -->|WiFi startup error| W["Log error<br/>continue control tasks"]
-    B -->|task stack low| T["Watchdog task logs warning"]
+    SRC["Runtime fault detected"] --> TYPE{"Fault type"}
 
-    S --> O["Visible in serial logs<br/>and transmitted status"]
-    F --> O
-    L --> O
-    W --> O
-    T --> O
+    TYPE -->|invalid sensor value| SV["Set sensor error flag<br/>use last valid value"]
+    TYPE -->|command timeout| CF["esp_hardware failsafe<br/>all actuators off"]
+    TYPE -->|stale sensor data| SD["esp_logic safe command<br/>fan, pump and alarm off"]
+    TYPE -->|WiFi startup error| WF["Log error<br/>continue control tasks"]
+    TYPE -->|task stack low| ST["Watchdog logs warning"]
+
+    SV --> VIS["Visible in serial logs<br/>and UART status frame"]
+    CF --> VIS
+    SD --> VIS
+    WF --> VIS
+    ST --> VIS

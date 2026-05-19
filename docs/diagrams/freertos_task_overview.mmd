@@ -1,36 +1,36 @@
 flowchart TB
-    subgraph H["esp_hardware FreeRTOS tasks"]
-        H1["sensor_task<br/>periodic sampling"]
-        H2["comm_task<br/>UART TX/RX"]
-        H3["actuator_task<br/>physical outputs"]
+    subgraph H["esp_hardware Tasks"]
+        H1["sensor_task<br/>Periodic ADC and GPIO sampling"]
+        H2["comm_task<br/>UART2 TX/RX"]
+        H3["actuator_task<br/>Physical output control"]
         H4["watchdog_task<br/>TWDT and stack monitoring"]
-        H1 -->|"shared sensor data"| H2
-        H2 -->|"actuator queue"| H3
-        H4 -. monitors .-> H1
-        H4 -. monitors .-> H2
-        H4 -. monitors .-> H3
+        H1 -->|sensor data| H2
+        H2 -->|command queue| H3
+        H4 -.-> H1
+        H4 -.-> H2
+        H4 -.-> H3
     end
 
-    subgraph L["esp_logic FreeRTOS tasks"]
-        L1["comm_task<br/>UART TX/RX"]
-        L2["control_task<br/>control/state logic"]
-        L3["display_task<br/>display mode"]
-        L4["monitor_task<br/>stale data checks"]
-        L5["serial_task<br/>profile input"]
-        L6["wifi_task<br/>SoftAP/Web UI"]
+    subgraph L["esp_logic Tasks"]
+        L1["comm_task<br/>UART2 TX/RX"]
+        L2["control_task<br/>Control and state logic"]
+        L3["display_task<br/>LCD output"]
+        L4["monitor_task<br/>Stale data detection"]
+        L5["serial_task<br/>Profile input"]
+        L6["wifi_task<br/>SoftAP and Web UI"]
         L7["watchdog_task<br/>TWDT and stack monitoring"]
-        L1 -->|"sensor snapshot"| L2
-        L2 -->|"actuator command"| L1
+        L1 -->|sensor data| L2
+        L2 -->|actuator command| L1
         L2 --> L3
-        L4 --> L2
-        L5 -->|"profile"| L2
-        L6 -->|"read state / set profile"| L2
-        L7 -. monitors .-> L1
-        L7 -. monitors .-> L2
-        L7 -. monitors .-> L3
-        L7 -. monitors .-> L4
-        L7 -. monitors .-> L5
-        L7 -. monitors .-> L6
+        L4 -->|safe state signal| L2
+        L5 -->|profile| L2
+        L6 -->|profile| L2
+        L7 -.-> L1
+        L7 -.-> L2
+        L7 -.-> L3
+        L7 -.-> L4
+        L7 -.-> L5
+        L7 -.-> L6
     end
 
-    H2 <-->|"UART2"| L1
+    H2 <-->|UART2| L1

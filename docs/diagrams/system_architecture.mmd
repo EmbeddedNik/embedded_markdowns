@@ -1,28 +1,25 @@
 flowchart LR
-    subgraph H["esp_hardware - Smart Farm Kit"]
-        HS["Sensor task<br/>ADC, GPIO, DHT, ultrasonic"]
-        HA["Actuator task<br/>pump, fan, servo, LED, buzzer, LCD"]
-        HC["Communication task<br/>UART2 protocol"]
-        HW["Watchdog task"]
+    subgraph H["esp_hardware (Slave)"]
+        HS["sensor_task<br/>ADC · DHT · GPIO · Ultrasonic"]
+        HC["comm_task<br/>UART2 framing"]
+        HA["actuator_task<br/>Pump · Fan · Servo · LED · LCD"]
     end
 
-    subgraph L["esp_logic - Logic and Control"]
-        LC["Communication task<br/>UART2 protocol"]
-        CTRL["Control task<br/>state and control logic"]
-        MON["Monitor task<br/>freshness and warnings"]
-        SER["Serial task<br/>profile input"]
-        WIFI["WiFi task<br/>SoftAP, HTTP, Web UI"]
-        LW["Watchdog task"]
+    subgraph L["esp_logic (Master)"]
+        LC["comm_task<br/>UART2 framing"]
+        CTRL["control_task<br/>State machine and control logic"]
+        MON["monitor_task<br/>Stale data detection"]
+        SER["serial_task<br/>Profile via serial"]
+        WIFI["wifi_task<br/>SoftAP · HTTP · Web UI"]
     end
 
-    KIT["Smart Farm sensors"] --> HS
-    HA --> ACT["Smart Farm actuators"]
-    HS --> HC
-    HC <-->|"UART2 frames"| LC
-    LC --> CTRL
-    CTRL --> LC
-    CTRL --> MON
-    SER --> CTRL
-    WIFI --> CTRL
-    WIFI --> UI["Browser dashboard"]
-    HC --> HA
+    SENSORS["Sensors"] --> HS
+    HS -->|sensor data| HC
+    HC <-->|UART2 frames| LC
+    HC -->|actuator command| HA
+    HA --> ACTS["Actuators"]
+    LC <-->|sensor / command| CTRL
+    MON -->|safe state signal| CTRL
+    SER -->|profile| CTRL
+    WIFI -->|profile| CTRL
+    WIFI --> UI["Browser UI"]

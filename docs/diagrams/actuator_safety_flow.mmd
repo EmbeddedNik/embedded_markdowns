@@ -1,28 +1,19 @@
 flowchart TD
-    A["actuator_task cycle"] --> Q{"New command in queue?"}
-    Q -- yes --> C["Use latest command"]
-    Q -- no --> K["Keep previous command"]
+    START["actuator_task cycle"] --> CMD{"New command<br/>in queue?"}
+    CMD -- yes --> APPLY["Use new command"]
+    CMD -- no --> KEEP["Keep previous command"]
 
-    C --> FAN
-    K --> FAN
-    FAN["Apply fan command"] --> SERVO{"Servo command enabled?"}
-    SERVO -- yes --> ST{"Target changed?"}
-    ST -- yes --> SPWM["Attach PWM and move servo"]
-    ST -- no --> SH{"Hold time elapsed?"}
-    SH -- yes --> SD["Stop PWM and hold signal low"]
-    SH -- no --> PUMP
-    SPWM --> PUMP
-    SD --> PUMP
-    SERVO -- no --> SSAFE["Disable servo PWM<br/>and forget target"]
-    SSAFE --> PUMP
+    APPLY --> FAN["Set fan speed"]
+    KEEP --> FAN
+    FAN --> SERVO["Move servo to target<br/>Release PWM after hold time"]
 
-    PUMP{"Pump requested?"} -- yes --> PLIM{"Max on-time reached?"}
-    PLIM -- yes --> POFF["Force pump off<br/>enter cooldown"]
-    PLIM -- no --> PON["Pump on"]
+    SERVO --> PUMP{"Pump<br/>requested?"}
+    PUMP -- yes --> LIMIT{"Max on-time<br/>reached?"}
+    LIMIT -- no --> PON["Pump on"]
+    LIMIT -- yes --> POFF["Force pump off<br/>Start cooldown"]
     PUMP -- no --> POFF2["Pump off"]
-    POFF --> BUZ
-    PON --> BUZ
-    POFF2 --> BUZ
 
-    BUZ["Apply buzzer and LED"] --> LCD["Refresh LCD periodically"]
-    LCD --> END["Wait until next cycle"]
+    PON --> OUT["Apply buzzer and LED<br/>Refresh LCD"]
+    POFF --> OUT
+    POFF2 --> OUT
+    OUT --> END["Wait for next cycle"]

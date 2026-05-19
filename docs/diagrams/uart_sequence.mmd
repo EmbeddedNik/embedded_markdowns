@@ -1,21 +1,20 @@
 sequenceDiagram
-    participant Sensors as Smart Farm sensors
     participant HW as esp_hardware
     participant UART as UART2
-    participant Logic as esp_logic
-    participant Act as Actuators
+    participant LO as esp_logic
+    participant ACT as Actuators
 
-    loop cyclic operation
-        HW->>Sensors: sample sensor values
-        HW->>UART: send MSG_SENSOR_DATA
-        UART->>Logic: receive and validate frame
-        Logic->>Logic: update sensor snapshot
-        Logic->>Logic: run state and control logic
-        Logic->>UART: send MSG_ACTUATOR_CMD
-        UART->>HW: receive and validate frame
-        HW->>Act: apply actuator command
+    loop Cyclic operation
+        HW->>HW: Sample sensors
+        HW->>UART: MSG_SENSOR_DATA frame
+        UART->>LO: Receive and validate
+        LO->>LO: Update sensor snapshot
+        LO->>LO: Run control logic
+        LO->>UART: MSG_ACTUATOR_CMD frame
+        UART->>HW: Receive and validate
+        HW->>ACT: Apply actuator command
     end
 
-    alt command timeout on esp_hardware
-        HW->>Act: apply failsafe state
+    alt Command timeout on esp_hardware
+        HW->>ACT: Apply failsafe state
     end

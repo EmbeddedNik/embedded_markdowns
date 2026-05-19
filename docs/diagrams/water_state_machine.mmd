@@ -1,9 +1,7 @@
 stateDiagram-v2
     [*] --> OK
-    OK --> REFILL: water level below refill threshold
-    REFILL --> OK: water level above recovery threshold
+    OK --> REFILL : level below refill threshold
+    REFILL --> OK : level above recovery threshold
 
-    OK: water sufficient
-    OK: display state OK
-    REFILL: water too low
-    REFILL: display state REFILL
+    OK : Water sufficient
+    REFILL : Water level too low

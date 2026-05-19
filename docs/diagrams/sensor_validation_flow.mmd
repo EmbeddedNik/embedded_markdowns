@@ -1,15 +1,15 @@
 flowchart TD
-    A["sensor_task cycle"] --> ADC["Read ADC sensors<br/>water level and LDR"]
-    ADC --> ROC["Check implausible jumps<br/>rate-of-change detection"]
-    ROC --> D["Read digital inputs<br/>PIR and button"]
-    D --> US["Measure ultrasonic distance<br/>with timeout"]
-    US --> DHT{"DHT read interval reached?"}
-    DHT -- yes --> DHTR["Read DHT<br/>retry once on timing failure"]
-    DHT -- no --> OLD["Reuse previous DHT values"]
-    DHTR --> P["Apply plausibility checks<br/>and preserve last good values"]
-    OLD --> P
-    P --> M["Publish protected sensor snapshot"]
-    M --> LOG{"Log interval or error transition?"}
-    LOG -- yes --> L["Write serial diagnostic log"]
-    LOG -- no --> END["Wait until next cycle"]
-    L --> END
+    START["sensor_task cycle"] --> ADC["Read ADC sensors<br/>water level and LDR"]
+    ADC --> ROC["Rate-of-change check<br/>reject implausible jumps"]
+    ROC --> DIG["Read digital inputs<br/>PIR and button"]
+    DIG --> US["Read ultrasonic distance<br/>with timeout guard"]
+    US --> DHT{"DHT read interval<br/>reached?"}
+    DHT -- yes --> DHTR["Read DHT sensor<br/>retry once on failure"]
+    DHT -- no --> REUSE["Reuse previous<br/>DHT values"]
+    DHTR --> PLAUS["Apply plausibility bounds<br/>preserve last good value on error"]
+    REUSE --> PLAUS
+    PLAUS --> PUB["Publish sensor snapshot"]
+    PUB --> LOG{"Log interval or<br/>error transition?"}
+    LOG -- yes --> SERIAL["Write serial log"]
+    LOG -- no --> END["Wait for next cycle"]
+    SERIAL --> END

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\Niklas\\\\Documents\\\\embedded_markdowns\\\\docs\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)"
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\Niklas\\\\Documents\\\\embedded_markdowns\\\\docs\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
+      "Bash(mmdc --version)",
+      "Bash(npm --version)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Niklas\\\\Documents\\\\embedded_markdowns\\\\docs\\\\diagrams\\\\svg\" | Select-Object Name, @{N=\"KB\";E={[math]::Round\\($_.Length/1KB,1\\)}} | Format-Table -AutoSize)"
     ]
   }
 }
