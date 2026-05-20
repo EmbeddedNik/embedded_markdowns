@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1000 500" width="1000" height="500"
+     font-family="'Helvetica Neue', Arial, sans-serif">
+
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="10" refY="5"
+            markerUnits="strokeWidth" markerWidth="7" markerHeight="5"
+            orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e3a5f"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="500" fill="#ffffff"/>
+
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LEFT BOX: esp_hardware
+       ══════════════════════════════════════════════════════════════ -->
+  <rect x="20" y="40" width="280" height="370" rx="5" ry="5"
+        fill="#f0f4f9" stroke="#1e3a5f" stroke-width="1.5"/>
+  <!-- Title bar (rounded top, flat bottom via overlay rect) -->
+  <rect x="20" y="40" width="280" height="42" rx="5" ry="5" fill="#1e3a5f"/>
+  <rect x="20" y="63" width="280" height="19" fill="#1e3a5f"/>
+  <text x="160" y="61" text-anchor="middle"
+        fill="#ffffff" font-size="13" font-weight="700" letter-spacing="0.4">esp_hardware</text>
+  <text x="160" y="74" text-anchor="middle"
+        fill="#7fa0bf" font-size="9">Slave &#xB7; Smart Farm Kit</text>
+
+  <!-- ── SENSOREN ── -->
+  <text x="36" y="99" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">SENSOREN</text>
+  <line x1="36" y1="103" x2="284" y2="103" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="40" y="117" fill="#1e3050" font-size="11">DHT11</text>
+  <text x="284" y="117" text-anchor="end" fill="#5a6e82" font-size="9">Temperatur &#xB7; Luftfeuchtigkeit</text>
+
+  <text x="40" y="133" fill="#1e3050" font-size="11">HC-SR04</text>
+  <text x="284" y="133" text-anchor="end" fill="#5a6e82" font-size="9">Ultraschall-Abstand</text>
+
+  <text x="40" y="149" fill="#1e3050" font-size="11">LDR</text>
+  <text x="284" y="149" text-anchor="end" fill="#5a6e82" font-size="9">Photowiderstand (ADC)</text>
+
+  <text x="40" y="165" fill="#1e3050" font-size="11">Kap. Sensor</text>
+  <text x="284" y="165" text-anchor="end" fill="#5a6e82" font-size="9">Wasserstand (ADC)</text>
+
+  <text x="40" y="181" fill="#1e3050" font-size="11">PIR</text>
+  <text x="284" y="181" text-anchor="end" fill="#5a6e82" font-size="9">Bewegungsdetektion</text>
+
+  <text x="40" y="197" fill="#1e3050" font-size="11">Taster</text>
+  <text x="284" y="197" text-anchor="end" fill="#5a6e82" font-size="9">Digitaler Eingang (GPIO)</text>
+
+  <line x1="36" y1="207" x2="284" y2="207" stroke="#b8c8d8" stroke-width="0.5"/>
+
+  <!-- ── AKTOREN ── -->
+  <text x="36" y="222" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">AKTOREN</text>
+  <line x1="36" y1="226" x2="284" y2="226" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="40" y="241" fill="#1e3050" font-size="11">Pumpe</text>
+  <text x="284" y="241" text-anchor="end" fill="#5a6e82" font-size="9">GPIO &#xB7; Sicherheitsverriegelung</text>
+
+  <text x="40" y="257" fill="#1e3050" font-size="11">L&#xFC;fter</text>
+  <text x="284" y="257" text-anchor="end" fill="#5a6e82" font-size="9">PWM (LEDC)</text>
+
+  <text x="40" y="273" fill="#1e3050" font-size="11">Servo</text>
+  <text x="284" y="273" text-anchor="end" fill="#5a6e82" font-size="9">PWM (LEDC)</text>
+
+  <text x="40" y="289" fill="#1e3050" font-size="11">LED</text>
+  <text x="284" y="289" text-anchor="end" fill="#5a6e82" font-size="9">Signalleuchte (GPIO)</text>
+
+  <text x="40" y="305" fill="#1e3050" font-size="11">Buzzer</text>
+  <text x="284" y="305" text-anchor="end" fill="#5a6e82" font-size="9">PWM (LEDC)</text>
+
+  <line x1="36" y1="315" x2="284" y2="315" stroke="#b8c8d8" stroke-width="0.5"/>
+
+  <!-- ── SCHNITTSTELLEN ── -->
+  <text x="36" y="330" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">SCHNITTSTELLEN</text>
+  <line x1="36" y1="334" x2="284" y2="334" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="40" y="349" fill="#1e3050" font-size="11">LCD1602</text>
+  <text x="284" y="349" text-anchor="end" fill="#5a6e82" font-size="9">HD44780 via PCF8574 (I&#xB2;C)</text>
+
+  <text x="40" y="365" fill="#1e3050" font-size="11">UART2</text>
+  <text x="284" y="365" text-anchor="end" fill="#5a6e82" font-size="9">TX: IO2 &#xB7; RX: IO4</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════
+       RIGHT BOX: esp_logic
+       ══════════════════════════════════════════════════════════════ -->
+  <rect x="700" y="40" width="280" height="370" rx="5" ry="5"
+        fill="#f0f4f9" stroke="#1e3a5f" stroke-width="1.5"/>
+  <!-- Title bar -->
+  <rect x="700" y="40" width="280" height="42" rx="5" ry="5" fill="#1e3a5f"/>
+  <rect x="700" y="63" width="280" height="19" fill="#1e3a5f"/>
+  <text x="840" y="61" text-anchor="middle"
+        fill="#ffffff" font-size="13" font-weight="700" letter-spacing="0.4">esp_logic</text>
+  <text x="840" y="74" text-anchor="middle"
+        fill="#7fa0bf" font-size="9">Master &#xB7; Steuerung &amp; Kommunikation</text>
+
+  <!-- ── STEUERUNG ── -->
+  <text x="716" y="99" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">STEUERUNG</text>
+  <line x1="716" y1="103" x2="964" y2="103" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="720" y="117" fill="#1e3050" font-size="11">control_task</text>
+  <text x="964" y="117" text-anchor="end" fill="#5a6e82" font-size="9">Profilbasierte Lastregelung</text>
+
+  <text x="720" y="133" fill="#1e3050" font-size="11">control_logic</text>
+  <text x="964" y="133" text-anchor="end" fill="#5a6e82" font-size="9">FSM &#xB7; ECO / NORMAL / PERF</text>
+
+  <line x1="716" y1="143" x2="964" y2="143" stroke="#b8c8d8" stroke-width="0.5"/>
+
+  <!-- ── KOMMUNIKATION ── -->
+  <text x="716" y="158" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">KOMMUNIKATION</text>
+  <line x1="716" y1="162" x2="964" y2="162" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="720" y="177" fill="#1e3050" font-size="11">comm_task</text>
+  <text x="964" y="177" text-anchor="end" fill="#5a6e82" font-size="9">UART2 &#xB7; TX: IO33 &#xB7; RX: IO32</text>
+
+  <text x="720" y="193" fill="#1e3050" font-size="11">wifi_task</text>
+  <text x="964" y="193" text-anchor="end" fill="#5a6e82" font-size="9">SoftAP &#xB7; HTTP-API (REST)</text>
+
+  <text x="720" y="209" fill="#1e3050" font-size="11">serial_task</text>
+  <text x="964" y="209" text-anchor="end" fill="#5a6e82" font-size="9">UART0 &#xB7; USB-Konsole</text>
+
+  <line x1="716" y1="219" x2="964" y2="219" stroke="#b8c8d8" stroke-width="0.5"/>
+
+  <!-- ── &#xDC;BERWACHUNG ── -->
+  <text x="716" y="234" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">&#xDC;BERWACHUNG</text>
+  <line x1="716" y1="238" x2="964" y2="238" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="720" y="253" fill="#1e3050" font-size="11">monitor_task</text>
+  <text x="964" y="253" text-anchor="end" fill="#5a6e82" font-size="9">Datenstaleness &#xB7; Fehlerflags</text>
+
+  <text x="720" y="269" fill="#1e3050" font-size="11">watchdog_task</text>
+  <text x="964" y="269" text-anchor="end" fill="#5a6e82" font-size="9">TWDT &#xB7; Stack-Monitoring</text>
+
+  <line x1="716" y1="279" x2="964" y2="279" stroke="#b8c8d8" stroke-width="0.5"/>
+
+  <!-- ── DARSTELLUNG ── -->
+  <text x="716" y="294" fill="#1e3a5f" font-size="8.5" font-weight="700" letter-spacing="1.2">DARSTELLUNG</text>
+  <line x1="716" y1="298" x2="964" y2="298" stroke="#1e3a5f" stroke-width="0.6" opacity="0.45"/>
+
+  <text x="720" y="313" fill="#1e3050" font-size="11">display_task</text>
+  <text x="964" y="313" text-anchor="end" fill="#5a6e82" font-size="9">LCD-Modussteuerung</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════
+       UART2 CONNECTION
+       ══════════════════════════════════════════════════════════════ -->
+
+  <!-- Protocol specification badge -->
+  <rect x="368" y="208" width="264" height="32" rx="4" ry="4"
+        fill="#e4ebf5" stroke="#1e3a5f" stroke-width="0.9"/>
+  <text x="500" y="221" text-anchor="middle"
+        fill="#1e3a5f" font-size="11" font-weight="700" letter-spacing="0.5">UART2</text>
+  <text x="500" y="233" text-anchor="middle"
+        fill="#3d5570" font-size="8.5">115200 Baud &#xB7; 8N1 &#xB7; CRC-8</text>
+
+  <!-- Arrow 1: Sensordaten  esp_hardware ──→ esp_logic -->
+  <line x1="300" y1="264" x2="693" y2="264"
+        stroke="#1e3a5f" stroke-width="1.7" marker-end="url(#ah)"/>
+  <text x="500" y="256" text-anchor="middle"
+        fill="#1e3a5f" font-size="10" font-style="italic">Sensordaten</text>
+  <!-- Pin labels (TX on left, RX on right — crossed connection) -->
+  <text x="306" y="277" fill="#2b5f90"
+        font-size="8" font-family="'Courier New', Courier, monospace">TX &#xB7; IO2</text>
+  <text x="694" y="277" text-anchor="end" fill="#2b5f90"
+        font-size="8" font-family="'Courier New', Courier, monospace">RX &#xB7; IO32</text>
+
+  <!-- Arrow 2: Aktorbefehle  esp_logic ──→ esp_hardware -->
+  <line x1="700" y1="308" x2="307" y2="308"
+        stroke="#1e3a5f" stroke-width="1.7" marker-end="url(#ah)"/>
+  <text x="500" y="300" text-anchor="middle"
+        fill="#1e3a5f" font-size="10" font-style="italic">Aktorbefehle</text>
+  <!-- Pin labels (TX on right, RX on left — crossed connection) -->
+  <text x="694" y="321" text-anchor="end" fill="#2b5f90"
+        font-size="8" font-family="'Courier New', Courier, monospace">TX &#xB7; IO33</text>
+  <text x="306" y="321" fill="#2b5f90"
+        font-size="8" font-family="'Courier New', Courier, monospace">RX &#xB7; IO4</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════
+       GEMEINSAME MASSE (GND)
+       ══════════════════════════════════════════════════════════════ -->
+
+  <!-- Vertical drops from box bottom-center -->
+  <line x1="160" y1="410" x2="160" y2="448" stroke="#1e3a5f" stroke-width="1.4"/>
+  <line x1="840" y1="410" x2="840" y2="448" stroke="#1e3a5f" stroke-width="1.4"/>
+
+  <!-- Horizontal GND bus -->
+  <line x1="160" y1="448" x2="840" y2="448" stroke="#1e3a5f" stroke-width="1.4"/>
+
+  <!-- Center vertical drop to GND symbol -->
+  <line x1="500" y1="448" x2="500" y2="460" stroke="#1e3a5f" stroke-width="1.4"/>
+
+  <!-- GND symbol: three tapering horizontal lines -->
+  <line x1="478" y1="460" x2="522" y2="460" stroke="#1e3a5f" stroke-width="1.7"/>
+  <line x1="486" y1="467" x2="514" y2="467" stroke="#1e3a5f" stroke-width="1.7"/>
+  <line x1="494" y1="474" x2="506" y2="474" stroke="#1e3a5f" stroke-width="1.7"/>
+
+  <!-- GND label -->
+  <text x="500" y="489" text-anchor="middle"
+        fill="#1e3a5f" font-size="9.5">Gemeinsame Masse (GND)</text>
+
+</svg>

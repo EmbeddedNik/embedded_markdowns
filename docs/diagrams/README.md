@@ -86,31 +86,80 @@ flowchart TB
 
 ---
 
-## UART Communication Sequence
+## UART-Kommunikationssequenz
 
-Cyclic sensor/actuator frame exchange between both ESP32s including the failsafe path.
+Zyklischer Sensordaten- und Aktorbefehlaustausch zwischen beiden ESP32s – inklusive Mutex-Synchronisation, Frame-Aufbau, Zustandsautomat-Parser und Failsafe-Pfad.
 
 ```mermaid
 sequenceDiagram
-    participant Sensors as Smart Farm sensors
-    participant HW as esp_hardware
-    participant UART as UART2
-    participant Logic as esp_logic
-    participant Act as Actuators
+    participant SEN as Sensoren
+    participant ST as sensor_task
+    participant HCT as comm_task (HW)
+    participant U2 as UART2-Leitung
+    participant LCT as comm_task (Logic)
+    participant CTRL as control_task
+    participant AT as actuator_task
+    participant AKT as Aktoren
 
-    loop cyclic operation
-        HW->>Sensors: sample sensor values
-        HW->>UART: send MSG_SENSOR_DATA
-        UART->>Logic: receive and validate frame
-        Logic->>Logic: update sensor snapshot
-        Logic->>Logic: run state and control logic
-        Logic->>UART: send MSG_ACTUATOR_CMD
-        UART->>HW: receive and validate frame
-        HW->>Act: apply actuator command
+    Note over SEN,AKT: Normalbetrieb – Zykluszeit comm_task: 10 ms auf beiden ESP32s
+
+    loop zyklischer Betrieb
+
+        ST->>SEN: ADC / GPIO / DHT / Ultraschall auslesen
+        SEN-->>ST: Rohwerte
+        ST->>ST: Plausibilitätsprüfung und Fehlerflags setzen
+        Note over ST: g_sensor_mutex nehmen
+        ST->>ST: g_sensor_data schreiben
+        Note over ST: g_sensor_mutex freigeben
+
+        Note over HCT: TX-Trigger: alle 100 ms (tx_counter % 10 == 0)
+        Note over HCT: g_sensor_mutex nehmen (Timeout 5 ms)
+        HCT->>HCT: Sensor-Snapshot kopieren
+        Note over HCT: g_sensor_mutex freigeben
+        HCT->>HCT: Frame aufbauen
+        Note over HCT: [0xAA | 0x01 | 0x0D | sensor_data_t 13 B | CRC-8] = 17 Bytes
+        HCT->>U2: uart_write_bytes – 17 Bytes @ 115200 Baud
+
+        U2->>LCT: Byte-Stream im RX-Puffer (512 B)
+
+        Note over LCT: TX + RX: jeder 10-ms-Zyklus
+        LCT->>LCT: uart_read_bytes – byteweises Auslesen
+        LCT->>LCT: rx_parse_byte – Zustandsautomat
+        Note over LCT: WAIT_START → MSG_TYPE → PAYLOAD_LEN → PAYLOAD → CHECKSUM
+        LCT->>LCT: CRC-8 prüfen → PARSE_COMPLETE oder PARSE_ERROR (Resync)
+        Note over LCT: g_rx_sensor_mutex nehmen (Timeout 5 ms)
+        LCT->>LCT: g_rx_sensor_data + Zeitstempel aktualisieren, g_rx_data_valid = 1
+        Note over LCT: g_rx_sensor_mutex freigeben
+
+        CTRL->>CTRL: g_rx_sensor_mutex nehmen – Sensordaten lesen – freigeben
+        CTRL->>CTRL: Regellogik ausführen
+        Note over CTRL: Wasserzustand, Licht/Nacht, Lüfter-Profil, PIR-Alarm
+        CTRL->>CTRL: g_tx_cmd_mutex nehmen – g_tx_actuator_cmd schreiben – freigeben
+
+        Note over LCT: g_tx_cmd_mutex nehmen (portMAX_DELAY)
+        LCT->>LCT: Aktorbefehl-Snapshot kopieren
+        Note over LCT: g_tx_cmd_mutex freigeben
+        LCT->>LCT: Frame aufbauen
+        Note over LCT: [0xAA | 0x02 | 0x07 | actuator_cmd_t 7 B | CRC-8] = 11 Bytes
+        LCT->>U2: uart_write_bytes – 11 Bytes @ 115200 Baud
+
+        U2->>HCT: Byte-Stream im RX-Puffer
+
+        HCT->>HCT: uart_read_bytes – byteweises Auslesen
+        HCT->>HCT: rx_parse_byte – Zustandsautomat + CRC-8 prüfen
+        HCT->>HCT: proto_to_hw_cmd – actuator_cmd_t → hw_actuator_cmd_t
+        HCT->>HCT: g_actuator_queue leeren, neuen Befehl einreihen
+        HCT->>HCT: last_cmd_us Zeitstempel zurücksetzen
+
+        AT->>AT: xQueueReceive – g_actuator_queue lesen
+        AT->>AKT: Pumpe / Lüfter (PWM) / Servo / LED / Summer / LCD ansteuern
+
     end
 
-    alt command timeout on esp_hardware
-        HW->>Act: apply failsafe state
+    alt Befehlsausfall auf esp_hardware (kein gültiger Befehl > 500 ms)
+        HCT->>HCT: Failsafe ausgelöst – Sicherheitszustand aufbauen
+        HCT->>AT: Sicherheitsbefehl in g_actuator_queue einreihen
+        AT->>AKT: Alle Aktoren deaktivieren
     end
 ```
 
